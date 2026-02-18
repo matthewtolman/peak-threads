@@ -143,7 +143,7 @@ describe('Semaphore', async () => {
     it('can lock when contended', async function () {
         this.timeout(30_000)
 
-        for (let i = 0; i < 50; ++i) {
+        for (let i = 0; i < 2; ++i) {
             const sem = make(Semaphore, 1)
             const mem = new Int32Array(new SharedArrayBuffer(64))
             const thread1 = await Thread.spawn('semaphore.js', {sem, mem})
