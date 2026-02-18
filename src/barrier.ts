@@ -10,7 +10,7 @@ export class Barrier {
     private eventOffset: number
 
     public static ELEMENT_LAYOUT: ElementLayout = [['int32', 3]]
-    public static HYDRATION_KEY = 'Barrier'
+    public static HYDRATION_KEY = '__threads_Barrier'
 
     constructor(address: Address<Int32Array>, needed: number, initMem: boolean = true) {
         this.mutex = new Mutex(address)

@@ -1,4 +1,4 @@
-const {Barrier, Thread, Mutex, make, ConditionVariable, WaitGroup, Semaphore} = threads
+const {Barrier, ThreadPool, Thread, Mutex, make, ConditionVariable, WaitGroup, Semaphore} = threads
 
 describe('Thread', () => {
     it('is setup', async () => {
@@ -76,6 +76,18 @@ describe('Thread', () => {
         expect(await thread.sendWork(4)).to.equal(16)
         thread.sendEvent(-23)
         expect(await p).to.equal(99)
+    })
+})
+
+describe('ThreadPool', () => {
+    it('can create thread pool', async () => {
+        const thread = await ThreadPool.spawn('worker1.js', 2)
+        expect(thread).to.not.be.null
+        expect(await thread.sendWork(4)).to.equal(16)
+        expect(await thread.sendWork(2)).to.equal(4)
+        expect(await thread.sendWork(3)).to.equal(9)
+        expect(await thread.sendWork(5)).to.equal(25)
+        expect(await thread.sendWork(6)).to.equal(36)
     })
 })
 

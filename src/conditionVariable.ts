@@ -8,7 +8,7 @@ export class ConditionVariable {
     private valOffset: number
 
     public static ELEMENT_LAYOUT: ElementLayout = [['int32', 2]]
-    public static HYDRATION_KEY = 'ConditionVariable'
+    public static HYDRATION_KEY = '__threads_ConditionVariable'
 
     constructor(address: Address<Int32Array>) {
         if (address.count() < 2) {

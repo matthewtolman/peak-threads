@@ -6,7 +6,7 @@ export class WaitGroup {
     private offset: number
 
     public static ELEMENT_LAYOUT: ElementLayout = ['int32']
-    public static HYDRATION_KEY = 'WaitGroup'
+    public static HYDRATION_KEY = '__threads_WaitGroup'
 
     constructor(address: Address<Int32Array>) {
         this.memory = address.memory()

@@ -7,7 +7,7 @@ export class Mutex {
     private static contended = 2
 
     public static ELEMENT_LAYOUT: ElementLayout = [['int32', 2]]
-    public static HYDRATION_KEY = 'Mutex'
+    public static HYDRATION_KEY = '__threads_Mutex'
 
     private memory: Int32Array
     private offset: number

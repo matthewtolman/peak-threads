@@ -8,7 +8,7 @@ export class Semaphore {
     private value: number
 
     public static ELEMENT_LAYOUT: ElementLayout = [['int32', 2]]
-    public static HYDRATION_KEY = 'Semaphore'
+    public static HYDRATION_KEY = '__threads_Semaphore'
 
     constructor(address: Address<Int32Array>, value: number, initMem: boolean = true) {
         this.memory = address.memory()

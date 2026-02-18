@@ -4,7 +4,7 @@ export class Address<T extends TypedArray> {
     private mem: T;
     private indx: number;
     private cnt: number;
-    public static HYDRATION_KEY = 'Address'
+    public static HYDRATION_KEY = '__threads_Address'
 
     constructor(memArray: T, memOffset: number = 0, cnt: number = 1) {
         this.mem = memArray

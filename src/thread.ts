@@ -8,6 +8,43 @@ import {Semaphore} from "./semaphore.ts";
 let curThreadId = 'main'
 let incThreadId = 0
 
+export interface DehydrationClass {
+    key: string,
+    type: any
+}
+
+export interface DehydrationFunctions {
+    key: string,
+    isa: (_: any) => boolean,
+    dehydrate: (_: any) => any,
+    hydrate: (_: any) => any,
+}
+
+const dehydrationKeys: Set<string> = new Set<string>()
+const dehydrationList: Array<DehydrationClass|DehydrationFunctions> = []
+
+export function registerDeHydration(kit: DehydrationFunctions|DehydrationClass) {
+    if (!kit || !(typeof kit === 'object' || typeof kit === 'function') || !('key' in kit) || !('type' in kit || ('isa' in kit && 'dehydrate' in kit && 'hydrate in kit'))) {
+        throw new Error('Bad DeHydration registration!')
+    }
+
+    if ('type' in kit) {
+        if (!('dehydrate' in kit.type && 'hydrate' in kit.type)) {
+            throw new Error('Missing static methods "dehydrate" and "hydrate" on type! ' + kit.type)
+        }
+    }
+    else if (!kit.isa || !kit.dehydrate || !kit.hydrate) {
+        throw new Error('Need to have the fields "isa", "dehydrate" and "hydrate" all defined')
+    }
+
+    if (dehydrationKeys.has(kit.key)) {
+        throw new Error(`DeHydration with key '${kit}' already registered!`)
+    }
+
+    dehydrationKeys.add(kit.key)
+    dehydrationList.push(kit)
+}
+
 function dehydrate(obj: any): any {
     if (obj && Array.isArray(obj)) {
         return obj.map(dehydrate)
@@ -36,6 +73,20 @@ function dehydrate(obj: any): any {
             v.__value = Semaphore.dehydrate(obj)
         }
         else {
+            for (const de of dehydrationList) {
+                if ('type' in de) {
+                    if (obj instanceof de.type && de.type.dehydrate && de.type.hydrate) {
+                        v.__value = de.type.dehydrate(obj)
+                        return true
+                    }
+                }
+                else if ('isa' in de) {
+                    if (de.isa(obj)) {
+                        v.__value = de.dehydrate(obj)
+                        return true
+                    }
+                }
+            }
             for (const k of Object.keys(obj)) {
                 obj[k] = dehydrate(obj[k])
             }
@@ -63,7 +114,21 @@ function hydrate(obj: any): any {
             case Barrier.HYDRATION_KEY: return Barrier.hydrate(val)
             case Semaphore.HYDRATION_KEY: return Semaphore.hydrate(val)
         }
-        return obj
+
+        if (!dehydrationKeys.has(type)) {
+            console.error(`Unknown DeHydration '${type}! Unable to hydrate! Returning dehydrated object`)
+            return obj
+        }
+        else {
+            for (const de of dehydrationList) {
+                if ('type' in de) {
+                    return de.type.hydrate(obj)
+                }
+                else if ('isa' in de) {
+                    return de.hydrate(obj)
+                }
+            }
+        }
     }
     else if (obj && Array.isArray(obj)) {
         return obj.map(hydrate)
@@ -175,13 +240,13 @@ export class Thread {
         this.handler = h
     }
 
-    public sendWork(work: any) {
+    public sendWork<R = any>(work: any): Promise<R> {
         const workId = this.nextWorkId()
         const promise = new Promise((res, rej) => {
             this.workQueue[workId] = {res, rej}
         })
         this.worker.postMessage({__system: true, workId, work})
-        return promise
+        return promise as Promise<R>
     }
 
     public sendEvent(event: any) {
@@ -192,7 +257,7 @@ export class Thread {
         return this.worker
     }
 
-    public share(item: any, message: any = undefined): Promise<unknown> {
+    public share(item: any, message: any = undefined): Promise<void> {
         const shareId = this.nextWorkId()
         const promise = new Promise((res, rej) => {
             console.log('queued share', shareId)
@@ -203,17 +268,17 @@ export class Thread {
         } else {
             this.worker.postMessage({__system: true, shareId, share: item})
         }
-        return promise
+        return promise as Promise<void>
     }
 
-    public transfer(message: any, items: any[] = []): Promise<unknown> {
+    public transfer(message: any, items: any[] = []): Promise<void> {
         const transferId = this.nextWorkId()
         const promise = new Promise((res, rej) => {
             console.log('queued transfer', transferId)
             this.workQueue[transferId] = {res, rej}
         })
         this.worker.postMessage({__system: true, transfer: transferId, message}, items)
-        return promise
+        return promise as Promise<void>
     }
 
     public close() {
