@@ -1,4 +1,4 @@
-import {WaitGroup} from "../src/main.ts";
+importScripts("/dist/threads.iife.js")
 
 /**
  * @type WaitGroup

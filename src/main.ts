@@ -15,7 +15,7 @@ export function RegisterHandler(handler: (_: any) => any, type = 'event') {
             case 'transfer':
                 (self as any).ontransfer = handler
                 break
-            case 'job':
+            case 'work':
                 (self as any).onwork = handler
                 break
         }
@@ -100,7 +100,7 @@ export class Mutex {
     private static locked = 1
     private static contended = 2
 
-    public static ELEMENT_LAYOUT: ElementLayout = ['int32']
+    public static ELEMENT_LAYOUT: ElementLayout = [['int32', 2]]
     public static HYDRATION_KEY = 'Mutex'
 
     private memory: Int32Array
@@ -109,7 +109,6 @@ export class Mutex {
     constructor(address: Address<Int32Array>) {
         this.memory = address.memory()
         this.offset = address.offset()
-        this.memory.set([Mutex.unlocked], this.offset)
     }
 
     static hydrate({memory, offset}: {memory: Int32Array, offset: number}) {
@@ -134,23 +133,19 @@ export class Mutex {
      * @returns {boolean} True if got the lock, false if timed out
      */
     public lock (timeout: number = Infinity): boolean{
-        let cur = Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.locked)
-        if (cur === Mutex.unlocked) {
+        if (Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.locked) === Mutex.unlocked) {
             return true /* got the lock */
         }
         let lastTime = Date.now()
 
         while (true) {
-            if (cur !== 2) {
-                Atomics.compareExchange(this.memory, this.offset, cur, Mutex.contended)
-            }
+            Atomics.compareExchange(this.memory, this.offset, Mutex.locked, Mutex.contended)
             const r = Atomics.wait(this.memory, this.offset, Mutex.contended, timeout)
             if (r === "timed-out") {
                 return false
             }
 
-            cur = Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.contended)
-            if (cur === Mutex.unlocked) {
+            if (Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.contended) === Mutex.unlocked) {
                 return true /* got the lock */
             }
 
@@ -183,7 +178,7 @@ export class Mutex {
         let lastTime = Date.now()
 
         while (true) {
-            if (cur !== 2) {
+            if (cur !== Mutex.contended) {
                 Atomics.compareExchange(this.memory, this.offset, cur, Mutex.contended)
             }
             const {async, value} = (Atomics as any).waitAsync(this.memory, this.offset, Mutex.contended, timeout)
@@ -227,7 +222,7 @@ export class Mutex {
      * Unlocks the mutex
      */
     public unlock() {
-        if (Atomics.sub(this.memory, this.offset, 1) !== Mutex.locked) {
+        if (Atomics.sub(this.memory, this.offset, 1) === Mutex.contended) {
             Atomics.store(this.memory, this.offset, Mutex.unlocked)
             Atomics.notify(this.memory, this.offset, 1)
         }
@@ -273,10 +268,12 @@ export class WaitGroup {
         while (true) {
             const cur = Atomics.load(this.memory, this.offset);
             if (cur == 0) {
-                return;
+                return true;
             }
 
-            Atomics.wait(this.memory, this.offset, cur, timeout)
+            if (Atomics.wait(this.memory, this.offset, cur, timeout) === 'timed-out') {
+                return false
+            }
         }
     }
 
@@ -287,12 +284,17 @@ export class WaitGroup {
         while (true) {
             const cur = Atomics.load(this.memory, this.offset);
             if (cur == 0) {
-                return;
+                return true;
             }
 
             const {async, value} = (Atomics as any).waitAsync(this.memory, this.offset, cur, timeout)
             if (async) {
-                await value
+                if (await value === 'timed-out') {
+                    return false
+                }
+            }
+            else if (value === 'timed-out') {
+                return false
             }
         }
     }
@@ -466,6 +468,120 @@ export class Barrier {
     }
 }
 
+export class Semaphore {
+    private memory: Int32Array
+    private valOffset: number
+    private waiterOffset: number
+    private value: number
+
+    public static ELEMENT_LAYOUT: ElementLayout = [['int32', 2]]
+    public static HYDRATION_KEY = 'Semaphore'
+
+    constructor(address: Address<Int32Array>, value: number, initMem: boolean = true) {
+        this.memory = address.memory()
+        this.valOffset = address.offset()
+        this.value = value
+        this.waiterOffset = this.valOffset + 1
+        if (address.memory().length < 2) {
+            throw new Error("INVALID ADDRESS! MUST BE AT LEAST 2 INT32 WIDE!")
+        }
+
+        if (initMem) {
+            this.memory.set([value], this.valOffset)
+        }
+    }
+
+    static hydrate({memory, value}: {memory: Int32Array, value: number}) {
+        const addr = new Address(memory, 0)
+        return new Semaphore(addr, value, false)
+    }
+
+    static dehydrate(s: Semaphore) {
+        return {
+            __type: Semaphore.HYDRATION_KEY,
+            memory: s.memory,
+            offset: s.valOffset,
+            value: s.value
+        }
+    }
+
+    public acquire(timeout: number = Infinity) {
+        let lastTime = Date.now()
+        do {
+            const val = Atomics.load(this.memory, this.valOffset);
+
+            // attempt to acquire a lock
+            if (val > 0 && Atomics.compareExchange(this.memory, this.valOffset, val, val - 1) === val) {
+                return true;
+            }
+
+            Atomics.add(this.memory, this.waiterOffset, 1);
+
+            // wait for it to be available
+            if (Atomics.wait(this.memory, this.valOffset, 0, timeout) === 'timed-out') {
+                return false
+            }
+            Atomics.sub(this.memory, this.waiterOffset, 1);
+            if (Number.isFinite(timeout)) {
+                let curTime = Date.now()
+                let elapsed = curTime - lastTime
+                timeout -= elapsed
+                lastTime = curTime
+                if (timeout <= 0) {
+                    return false
+                }
+            }
+
+        } while (true);
+    }
+
+    public async acquireAsync(timeout: number = Infinity) {
+        if (!('waitAsync' in Atomics)) {
+            throw new Error("waitAsync not available!")
+        }
+        let lastTime = Date.now()
+        do {
+            const val = Atomics.load(this.memory, this.valOffset);
+
+            // attempt to acquire a lock
+            if (val > 0 && Atomics.compareExchange(this.memory, this.valOffset, val, val - 1) === val) {
+                return true;
+            }
+
+            Atomics.add(this.memory, this.waiterOffset, 1);
+
+            // wait for it to be available
+            const {async, value} = (Atomics as any).waitAsync(this.memory, this.valOffset, 0)
+            if (async) {
+                if (await value === 'timed-out') {
+                    return false
+                }
+            }
+            else if (value === 'timed-out') {
+                return false
+            }
+            Atomics.sub(this.memory, this.waiterOffset, 1);
+            if (Number.isFinite(timeout)) {
+                let curTime = Date.now()
+                let elapsed = curTime - lastTime
+                timeout -= elapsed
+                lastTime = curTime
+                if (timeout <= 0) {
+                    return false
+                }
+            }
+        } while (true);
+    }
+
+    public release() {
+        Atomics.add(this.memory, this.valOffset, 1)
+
+        if (Atomics.load(this.memory, this.waiterOffset) > 0) {
+            Atomics.notify(this.memory, this.valOffset, 1)
+        }
+    }
+}
+
 export function make<T>(Type: T, ...args: any[]) {
     let curBytes = 0
 
@@ -571,6 +687,9 @@ function dehydrate(obj: any): any {
         else if (obj instanceof Barrier) {
             v.__value = Barrier.dehydrate(obj)
         }
+        else if (obj instanceof Semaphore) {
+            v.__value = Semaphore.dehydrate(obj)
+        }
         else {
             for (const k of Object.keys(obj)) {
                 obj[k] = dehydrate(obj[k])
@@ -597,6 +716,7 @@ function hydrate(obj: any): any {
             case Address.HYDRATION_KEY: return Address.hydrate(val)
             case WaitGroup.HYDRATION_KEY: return WaitGroup.hydrate(val)
             case Barrier.HYDRATION_KEY: return Barrier.hydrate(val)
+            case Semaphore.HYDRATION_KEY: return Semaphore.hydrate(val)
         }
         return obj
     }
@@ -623,7 +743,7 @@ export class Thread {
         }
     } = {}
 
-    constructor(script: string, initData: any = null, handler: ((_: any) => any)|undefined = undefined) {
+    private constructor(res: any, script: string, initData: any = null, handler: ((_: any) => any)|undefined = undefined) {
         this.threadId = curThreadId + '->' + (++incThreadId)
         this.worker = new Worker(script)
         this.worker.postMessage(dehydrate({__system: true, threadId: this.threadId, init: initData}))
@@ -652,6 +772,21 @@ export class Thread {
                 else if (e.data.hasOwnProperty('__error')) {
                     console.error(`Received error from thread ${this.threadId}!`, 'error')
                 }
+                else if (e.data.hasOwnProperty('__initd')) {
+                    res()
+                }
+                else if (e.data.hasOwnProperty('__shared')) {
+                    const {res} = this.workQueue[e.data.__shared]
+                    res(null)
+                    delete this.workQueue[e.data.__shared]
+                    return
+                }
+                else if (e.data.hasOwnProperty('__transferd')) {
+                    const {res} = this.workQueue[e.data.__transferd]
+                    res(null)
+                    delete this.workQueue[e.data.__transferd]
+                    return
+                }
                 return
             }
 
@@ -667,6 +802,13 @@ export class Thread {
         this.worker.onmessageerror = (e) => {
             console.error(`Cound not send message to thread ${this.threadId}!`, e)
         }
+    }
+
+    public static spawn(script: string, initData: any = null, handler: ((_: any) => any)|undefined = undefined) {
+        const p = new Promise<Thread>(resolve => {
+            const t = new Thread(() => resolve(t), script, initData, handler)
+        })
+        return p
     }
 
     private nextWorkId () {
@@ -690,20 +832,36 @@ export class Thread {
         return promise
     }
 
+    public sendEvent(event: any) {
+        this.worker.postMessage(dehydrate(event))
+    }
+
     public raw() {
         return this.worker
     }
 
-    public share(items: any[], message: any = undefined) {
+    public share(item: any, message: any = undefined): Promise<unknown> {
+        const shareId = this.nextWorkId()
+        const promise = new Promise((res, rej) => {
+            console.log('queued share', shareId)
+            this.workQueue[shareId] = {res, rej}
+        })
         if (typeof message != 'undefined') {
-            this.worker.postMessage(dehydrate({__system: true, share: items, message}))
+            this.worker.postMessage(dehydrate({__system: true, shareId, share: item, message}))
         } else {
-            this.worker.postMessage(dehydrate({__system: true, share: items}))
+            this.worker.postMessage(dehydrate({__system: true, shareId, share: item}))
         }
+        return promise
     }
 
-    public transfer(message: any, items: any[]) {
-        this.worker.postMessage(dehydrate({__system: true, transfer: true, message}), items)
+    public transfer(message: any, items: any[] = []): Promise<unknown> {
+        const transferId = this.nextWorkId()
+        const promise = new Promise((res, rej) => {
+            console.log('queued transfer', transferId)
+            this.workQueue[transferId] = {res, rej}
+        })
+        this.worker.postMessage(dehydrate({__system: true, transfer: transferId, message}), items)
+        return promise
     }
 
     public close() {
@@ -719,24 +877,13 @@ function getThreadId(): string {
     return curThreadId
 }
 
-const obj = {
-    allocate: make,
-    Address,
-    Mutex,
-    ConditionVariable,
-    Thread,
-    RegisterHandler,
-}
-
-if (typeof window !== 'undefined') {
-    (window as any).threads = obj
-} else if (typeof self !== 'undefined') {
-    (self as any).threads = obj;
+if (typeof self !== 'undefined') {
     self.onmessage = async (e: MessageEvent) => {
         try {
             e = {...e, data: hydrate(e.data)}
         }
         catch (err) {
+            console.error('HYDRATION FAILED!', err, e.data)
             e = {...e, data: hydrate(e.data)}
         }
         try {
@@ -745,56 +892,70 @@ if (typeof window !== 'undefined') {
             const setRes = (r: any) => {
                 res2 = r
             }
-            if ('__system' in e.data && e.data.__system) {
-                if ('share' in e.data) {
-                    if ((self as any).onshare) {
-                        res = (self as any).onshare({share: e.data.share, message: e.data.message}, setRes)
-                    } else if ((self as any).onevent) {
-                        res = (self as any).onevent(e, setRes)
+
+            if (typeof e.data === 'object' || typeof e.data === 'function') {
+                if ('__system' in e.data && e.data.__system) {
+                    if ('share' in e.data && 'shareId' in e.data) {
+                        if ((self as any).onshare) {
+                            res = (self as any).onshare({share: e.data.share, message: e.data.message}, setRes)
+                        } else if ((self as any).onevent) {
+                            res = (self as any).onevent(e, setRes)
+                        }
+                        postMessage({__system: true, __shared: e.data.shareId})
+                    } else if ('transfer' in e.data) {
+                        if ((self as any).ontransfer) {
+                            res = (self as any).ontransfer(e.data.message, setRes)
+                        } else if ((self as any).onevent) {
+                            res = (self as any).onevent(e, setRes)
+                        }
+                        postMessage({__system: true, __transferd: e.data.transfer})
+                    } else if ('workId' in e.data) {
+                        if ((self as any).onwork) {
+                            res = (self as any).onwork(e.data.work, setRes)
+                        } else if ((self as any).onevent) {
+                            res = (self as any).onevent(e, setRes)
+                        }
+                    } else if ('threadId' in e.data) {
+                        setThreadId(e.data.threadId)
+                        if ((self as any).oninit) {
+                            (self as any).oninit(e.data.init)
+                        }
+                        postMessage({__system: true, __initd: true})
                     }
-                } else if ('transfer' in e.data) {
-                    if ((self as any).ontransfer) {
-                        res = (self as any).ontransfer(e.data.message, setRes)
-                    } else if ((self as any).onevent) {
-                        res = (self as any).onevent(e, setRes)
+                } else if ((self as any).onevent) {
+                    res = (self as any).onevent(e, setRes)
+                }
+
+                if (typeof res2 !== 'undefined') {
+                    if (res2 && (res2 instanceof Promise || ((typeof res2 === 'object' || typeof res2 === 'function') && 'then' in res2 && res2?.then === 'function'))) {
+                        res2 = await res2
                     }
-                } else if ('workId' in e.data) {
-                    if ((self as any).onwork) {
-                        res = (self as any).onwork(e.data.work, setRes)
-                    } else if ((self as any).onevent) {
-                        res = (self as any).onevent(e, setRes)
+
+                    if ('__system' in e.data && 'workId' in e.data) {
+                        postMessage(dehydrate({
+                            __system: true,
+                            threadId: getThreadId(),
+                            workId: e.data.workId,
+                            res: res2
+                        }))
                     }
-                } else if ('threadId' in e.data) {
-                    setThreadId(e.data.threadId)
-                    if ((self as any).oninit) {
-                        (self as any).oninit(e.data.init)
+                }
+
+                if (typeof res !== 'undefined') {
+                    if (res && (res instanceof Promise || ((typeof res === 'object' || typeof res === 'function') && 'then' in res && typeof res?.then === 'function'))) {
+                        res = await res
+                    }
+
+                    if ('__system' in e.data && 'workId' in e.data) {
+                        postMessage(dehydrate({__system: true, threadId: getThreadId(), workId: e.data.workId, res}))
                     }
                 }
             } else if ((self as any).onevent) {
-                res = (self as any).onevent(e, setRes)
-            }
-
-            if (typeof res2 !== 'undefined') {
-                if (res2 && (res2 instanceof Promise || ((typeof res2 === 'object' || typeof res2 === 'function') && 'then' in res2 && res2?.then === 'function'))) {
-                    res2 = await res2
-                }
-
-                if ('__system' in e.data && 'workId' in e.data) {
-                    postMessage(dehydrate({__system: true, threadId: getThreadId(), workId: e.data.workId, res: res2}))
-                }
-            }
-
-            if (typeof res !== 'undefined') {
-                if (res && (res instanceof Promise || ((typeof res === 'object' || typeof res === 'function') && 'then' in res && typeof res?.then === 'function'))) {
-                    res = await res
-                }
-
-                if ('__system' in e.data && 'workId' in e.data) {
-                    postMessage(dehydrate({__system: true, threadId: getThreadId(), workId: e.data.workId, res}))
-                }
+                (self as any).onevent(e, setRes)
             }
         } catch (err) {
-            if ('__system' in e.data && 'workId' in e.data) {
+            console.error('PROCESSING FAILED!', err, e.data)
+            if ((typeof e.data === 'object' || typeof e.data === 'function') && '__system' in e.data && 'workId' in e.data) {
                 postMessage(dehydrate({__system: true, threadId: getThreadId(), workId: e.data.workId, rej: err}))
             } else {
                 throw e
@@ -802,4 +963,3 @@ if (typeof window !== 'undefined') {
         }
     }
 }
-

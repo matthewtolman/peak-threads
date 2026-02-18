@@ -1,4 +1,4 @@
-import {Mutex, ConditionVariable} from "../src/main.ts";
+importScripts("/dist/threads.iife.js")
 
 /**
  * @type Mutex

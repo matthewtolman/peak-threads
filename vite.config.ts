@@ -5,7 +5,8 @@ export default defineConfig({
     build: {
         lib: {
             entry: resolve(__dirname, 'src/main.ts'),
-            name: '@matttolman/threads',
+            name: 'threads',
+            formats: ['es', 'cjs', 'umd', 'iife'],
             fileName: (format) => `threads.${format}.js`
         }
     }

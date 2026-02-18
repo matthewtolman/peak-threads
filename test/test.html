@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>threads</title>
+    <link rel="stylesheet" href="mocha.css"/>
+</head>
+<body>
+
+<script src="chai.js"></script>
+<script src="mocha.js"></script>
+<script src="/dist/threads.iife.js"></script>
+
+<div id="mocha"></div>
+
+<script class="mocha-init">
+    mocha.setup("bdd");
+    mocha.checkLeaks();
+    var expect = chai.expect
+</script>
+<script src="test.threads.js"></script>
+<script type="module">
+    /*
+
+    test('semaphore', async () => {
+        const sem = make(Semaphore, 1)
+        const mem = new Int32Array(new SharedArrayBuffer(64))
+        const thread1 = new Thread('semaphore.js', {sem, mem})
+        const thread2 = new Thread('semaphore.js', {sem, mem})
+        const thread3 = new Thread('semaphore.js', {sem, mem})
+        const thread4 = new Thread('semaphore.js', {sem, mem})
+
+        await Promise.all([
+            thread1.sendWork(1),
+            thread2.sendWork(1),
+            thread3.sendWork(1),
+            thread4.sendWork(1),
+        ])
+
+        assert(mem.at(0) === 800)
+    })
+    */
+</script>
+<script class="mocha-exec">
+    mocha.run();
+</script>
+</body>
+</html>
