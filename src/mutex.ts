@@ -1,5 +1,5 @@
 import type {ElementLayout} from "./types.ts";
-import {Address} from "./address.ts";
+import {Address, make} from "./memory.ts";
 
 export class Mutex {
     private static unlocked = 0
@@ -17,6 +17,10 @@ export class Mutex {
         this.offset = address.offset()
     }
 
+    static make() {
+        return make(Mutex)
+    }
+
     static hydrate({memory, offset}: { memory: Int32Array, offset: number }) {
         const addr = new Address(memory, offset)
         return new Mutex(addr)
@@ -24,7 +28,6 @@ export class Mutex {
 
     static dehydrate(mux: Mutex) {
         return {
-            __type: Mutex.HYDRATION_KEY,
             memory: mux.memory,
             offset: mux.offset,
         }

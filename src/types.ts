@@ -1,3 +1,6 @@
+/**
+ * Typed array (since TypeScript doesn't come with this)
+ */
 export type TypedArray =
     | Int8Array<ArrayBufferLike>
     | Uint8Array<ArrayBufferLike>
@@ -11,8 +14,9 @@ export type TypedArray =
     | BigInt64Array<ArrayBufferLike>
     | BigUint64Array<ArrayBufferLike>;
 
-export type AtomicSyncTypedArray = Int32Array<ArrayBufferLike> | BigInt64Array<ArrayBufferLike>;
-
+/**
+ * Type string definitions for use with @see make
+ */
 export type ElementLayoutItem =
     | 'int8'
     | 'int16'
@@ -26,4 +30,7 @@ export type ElementLayoutItem =
     | 'f32'
     | 'f64';
 
+/**
+ * Memory layout definitions for use with @see make
+ */
 export type ElementLayout = Array<ElementLayoutItem | [ElementLayoutItem, number]>;

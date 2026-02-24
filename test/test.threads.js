@@ -20,7 +20,7 @@ describe('Thread', () => {
         const handler = (v) => {
             resolve(v.data)
         }
-        const thread = await Thread.spawn('worker1.js', 45, handler)
+        const thread = await Thread.spawn('worker1.js', {initData: 45, onEventHandler: handler})
         expect(thread).to.not.be.null
         expect(await thread.sendWork(4)).to.equal(16)
         thread.sendEvent(-23)
@@ -35,7 +35,7 @@ describe('Thread', () => {
         const handler = (v) => {
             resolve(v.data)
         }
-        const thread = await Thread.spawn('worker1.js', 45, handler)
+        const thread = await Thread.spawn('worker1.js', {initData: 45, onEventHandler: handler})
         expect(thread).to.not.be.null
 
         await thread.share(99)
@@ -52,7 +52,7 @@ describe('Thread', () => {
         const handler = (v) => {
             resolve(v.data)
         }
-        const thread = await Thread.spawn('worker1.js', 45, handler)
+        const thread = await Thread.spawn('worker1.js', {initData:45, onEventHandler: handler})
         expect(thread).to.not.be.null
 
         await thread.share(99, 55)
@@ -69,7 +69,7 @@ describe('Thread', () => {
         const handler = (v) => {
             resolve(v.data)
         }
-        const thread = await Thread.spawn('worker1.js', 45, handler)
+        const thread = await Thread.spawn('worker1.js', {initData:45, onEventHandler:handler})
         expect(thread).to.not.be.null
 
         await thread.transfer(99, [])
@@ -81,7 +81,7 @@ describe('Thread', () => {
 
 describe('ThreadPool', () => {
     it('can create thread pool', async () => {
-        const thread = await ThreadPool.spawn('worker1.js', 2)
+        const thread = await ThreadPool.spawn('worker1.js', {initData: 2})
         expect(thread).to.not.be.null
         expect(await thread.sendWork(4)).to.equal(16)
         expect(await thread.sendWork(2)).to.equal(4)
@@ -99,7 +99,7 @@ describe('ConditionVariable', async () => {
 
         await mux.lockAsync()
 
-        const thread = await Thread.spawn('cond_var.js', {mux, cv, mem})
+        const thread = await Thread.spawn('cond_var.js', {initData: {mux, cv, mem}})
 
         thread.sendWork(4)
 
@@ -115,7 +115,7 @@ describe('WaitGroup', async () => {
     it('can lock wait until tasks are done', async function () {
         const wg = make(WaitGroup)
         const mem = new Int32Array(new SharedArrayBuffer(64))
-        const thread = await Thread.spawn('wait_group.js', {wg, mem})
+        const thread = await Thread.spawn('wait_group.js', {initData: {wg, mem}})
 
         wg.add(1)
         thread.sendWork(4)
@@ -139,8 +139,8 @@ describe('Barrier', async () => {
     it('blocks until all threads hit the barrier', async function () {
         const bar = make(Barrier, 3)
         const mem = new Int32Array(new SharedArrayBuffer(64))
-        const thread1 = await Thread.spawn('barrier.js', {bar, mem})
-        const thread2 = await Thread.spawn('barrier.js', {bar, mem})
+        const thread1 = await Thread.spawn('barrier.js', {initData: {bar, mem}})
+        const thread2 = await Thread.spawn('barrier.js', {initData: {bar, mem}})
 
         thread1.sendWork(1)
         thread2.sendWork(1)
@@ -158,10 +158,10 @@ describe('Semaphore', async () => {
         for (let i = 0; i < 2; ++i) {
             const sem = make(Semaphore, 1)
             const mem = new Int32Array(new SharedArrayBuffer(64))
-            const thread1 = await Thread.spawn('semaphore.js', {sem, mem})
-            const thread2 = await Thread.spawn('semaphore.js', {sem, mem})
-            const thread3 = await Thread.spawn('semaphore.js', {sem, mem})
-            const thread4 = await Thread.spawn('semaphore.js', {sem, mem})
+            const thread1 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
+            const thread2 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
+            const thread3 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
+            const thread4 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
 
             await Promise.all([
                 thread1.sendWork(1),
@@ -186,8 +186,8 @@ describe('Mutex', async () => {
         const mem = new Int32Array(new SharedArrayBuffer(64))
 
         await mux.lockAsync()
-        const thread1 = await Thread.spawn('mutex.js', {mux, mem})
-        const thread2 = await Thread.spawn('mutex.js', {mux, mem})
+        const thread1 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
+        const thread2 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
 
         const p1 = thread1.sendWork(w)
         const p2 = thread2.sendWork(w)
@@ -204,9 +204,9 @@ describe('Mutex', async () => {
         const w = 500
         const mux = make(Mutex)
         const mem = new Int32Array(new SharedArrayBuffer(64))
-        const thread1 = await Thread.spawn('mutex.js', {mux, mem})
-        const thread2 = await Thread.spawn('mutex.js', {mux, mem})
-        const thread3 = await Thread.spawn('mutex.js', {mux, mem})
+        const thread1 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
+        const thread2 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
+        const thread3 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
 
         await mux.lockAsync()
 
