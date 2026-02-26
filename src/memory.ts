@@ -104,6 +104,12 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return this.cnt
     }
 
+    /**
+     * Does an atomic add on an address (or at an index if the address is an array)
+     * @param amt Amount to add
+     * @param index Index of the array element
+     * @return old value prior to the operation
+     */
     public atomicAdd(amt?: R, index = 0): R {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -124,6 +130,12 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return Atomics.add(this.mem as any, this.indx + index, amt as any) as R
     }
 
+    /**
+     * Does an atomic subtract on an address (or at an index if the address is an array)
+     * @param amt Amount to subtract
+     * @param index Index of the array element
+     * @return old value prior to the operation
+     */
     public atomicSub(amt?: R, index = 0): R {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -144,16 +156,22 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return Atomics.sub(this.mem as any, this.indx + index, amt as any) as R
     }
 
-    public atomicAnd(amt?: R, index = 0): R {
+    /**
+     * Does an atomic and on an address (or at an index if the address is an array)
+     * @param val Value to and with
+     * @param index Index of the array element
+     * @return old value prior to the operation
+     */
+    public atomicAnd(val?: R, index = 0): R {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
         }
-        if (typeof amt === 'undefined') {
+        if (typeof val === 'undefined') {
             if (this.mem instanceof BigUint64Array || this.mem instanceof BigInt64Array) {
-                (amt as any) = 1n
+                (val as any) = 1n
             }
             else {
-                (amt as any) = 1
+                (val as any) = 1
             }
         }
         if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
@@ -161,9 +179,15 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
             || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
             throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
         }
-        return Atomics.and(this.mem as any, this.indx + index, amt as any) as R
+        return Atomics.and(this.mem as any, this.indx + index, val as any) as R
     }
 
+    /**
+     * Does an atomic or on an address (or at an index if the address is an array)
+     * @param val Value to and with
+     * @param index Index of the array element
+     * @return old value prior to the operation
+     */
     public atomicOr(val?: R, index = 0): R {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -176,6 +200,12 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return Atomics.or(this.mem as any, this.indx + index, val as any) as R
     }
 
+    /**
+     * Does an atomic xor on an address (or at an index if the address is an array)
+     * @param val Value to and with
+     * @param index Index of the array element
+     * @return old value prior to the operation
+     */
     public atomicXor(val?: R, index = 0): R {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -188,6 +218,13 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return Atomics.or(this.mem as any, this.indx + index, val as any) as R
     }
 
+    /**
+     * Does an atomic compare-exchange on an address (or at an index if the address is an array)
+     * @param expected Expected value for the exchange
+     * @param replacement Value to replace (so long as the address holds expected)
+     * @param index Index of the array element
+     * @return old value prior to the operation
+     */
     public atomicCmpExch(expected: R, replacement: R, index = 0): R {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -200,6 +237,12 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return Atomics.compareExchange(this.mem as any, this.indx + index, expected as any, replacement as any) as R
     }
 
+    /**
+     * Does an atomic exchange on an address (or at an index if the address is an array)
+     * @param replacement Value to replace
+     * @param index Index of the array element
+     * @return old value prior to the operation
+     */
     public atomicExchange(replacement: R, index = 0): R {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -212,6 +255,12 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return Atomics.exchange(this.mem as any, this.indx + index, replacement as any) as R
     }
 
+    /**
+     * Does an atomic store on an address (or at an index if the address is an array)
+     * No return value
+     * @param replacement Value to store
+     * @param index Index of the array element
+     */
     public atomicStore(replacement: R, index = 0): void {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -224,6 +273,11 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         Atomics.store(this.mem as any, this.indx + index, replacement as any) as R
     }
 
+    /**
+     * Does an atomic load on an address (or at an index if the address is an array)
+     * @param index Index of the array element
+     * @return Value at address
+     */
     public atomicLoad(index = 0): R {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -236,6 +290,13 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return Atomics.load(this.mem as any, this.indx + index) as R
     }
 
+    /**
+     * Does an atomic notify on an address (or at an index if the address is an array)
+     * Will wake up threads at an address. Use 1 for notify one, Infinity for notify all
+     * @param cnt How many threads to wake
+     * @param index Index of the array element
+     * @return Number of threads woken up
+     */
     public atomicNotify(cnt: number = Infinity, index = 0): number {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -248,14 +309,34 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return Atomics.notify(this.mem as any, this.indx + index, cnt)
     }
 
+    /**
+     * Does an atomic notify on an address (or at an index if the address is an array)
+     * Notifies exactly one thread
+     * @param index Index of the array element
+     * @return Number of threads woken up
+     */
     public atomicNotifyOne(index = 0): number {
         return this.atomicNotify(1, index)
     }
 
+    /**
+     * Does an atomic notify on an address (or at an index if the address is an array)
+     * Notifies all waiting threads
+     * @param index Index of the array element
+     * @return Number of threads woken up
+     */
     public atomicNotifyAll(index = 0): number {
         return this.atomicNotify(Infinity, index)
     }
 
+    /**
+     * Does a **blocking** atomic wait on an address (or at an index if the address is an array)
+     * Only blocks if the value at the address matches the value passed in.
+     * @param value Value indicating when a wait should happen
+     * @param timeout Timeout for waiting
+     * @param index Index of the array element
+     * @return Status of the wait ('ok' = waited, 'not-equal' = did not wait, 'timed-out' = timeout)
+     */
     public atomicWait(value: R, timeout = Infinity, index = 0): 'ok'|'not-equal'|'timed-out' {
         if (index >= this.cnt) {
             throw new Error('OUT OF BOUNDS!')
@@ -268,6 +349,14 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
         return Atomics.wait(this.mem as any, this.indx + index, value as any, timeout)
     }
 
+    /**
+     * Does an async atomic wait on an address (or at an index if the address is an array)
+     * Only blocks if the value at the address matches the value passed in.
+     * @param val Value indicating when a wait should happen
+     * @param timeout Timeout for waiting
+     * @param index Index of the array element
+     * @return Status of the wait ('ok' = waited, 'not-equal' = did not wait, 'timed-out' = timeout)
+     */
     public async atomicWaitAsync(val: R, timeout = Infinity, index = 0): Promise<'ok'|'not-equal'|'timed-out'> {
         if (!('waitAsync' in Atomics)) {
             throw new Error("waitAsync not available!")
