@@ -1,4 +1,10 @@
-import type {TypedArray} from "./types.ts";
+import type {BigIntTypedArray, TypedArray} from "./types.ts";
+
+export interface DehydratedAddress<T extends TypedArray> {
+    memory: T,
+    offset: number,
+    cnt: number
+}
 
 /**
  * Represents an address to some typed data (e.g. 32-bit integer) or an array of the same typed data.
@@ -7,7 +13,7 @@ import type {TypedArray} from "./types.ts";
  *
  * Generally, any class which needs "shared memory" will use an Address to wrap it.
  */
-export class Address<T extends TypedArray> {
+export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigint : number> {
     private mem: T;
     private indx: number;
     private cnt: number;
@@ -34,15 +40,15 @@ export class Address<T extends TypedArray> {
      * @param offset Maximum number of threads needed (different from current number of threads needed)
      * @param cnt Number of elements to hydrate from
      */
-    static hydrate({memory, offset, cnt}: { memory: TypedArray, offset: number, cnt: number }) {
-        return new Address(memory, offset, cnt)
+    static hydrate<T extends TypedArray>({memory, offset, cnt}: DehydratedAddress<T>) {
+        return new Address<T>(memory as T, offset, cnt)
     }
 
     /**
      * Dehydrate an address for message passing
      * @param addr Address to dehydrate
      */
-    static dehydrate<T extends TypedArray>(addr: Address<T>) {
+    static dehydrate<T extends TypedArray>(addr: Address<T>): DehydratedAddress<T> {
         return {
             memory: addr.memory(),
             offset: addr.offset(),
@@ -55,9 +61,9 @@ export class Address<T extends TypedArray> {
      * @param index Value to get
      * @return Value
      */
-    public get(index: number = 0): number|bigint {
+    public get(index: number = 0): R {
         if (index < this.cnt) {
-            return this.mem.at(this.indx + index)!!
+            return this.mem.at(this.indx + index)!! as R
         }
         throw new Error("Out of bounds access detected!")
     }
@@ -67,7 +73,7 @@ export class Address<T extends TypedArray> {
      * @param value The value to set
      * @param index The index to set at
      */
-    public set(value: number|bigint, index: number = 0) {
+    public set(value: R, index: number = 0): void {
         if (index < this.cnt) {
             return this.mem.set([value as any], this.indx + index)!!
         }
@@ -96,6 +102,189 @@ export class Address<T extends TypedArray> {
      */
     public count(): number {
         return this.cnt
+    }
+
+    public atomicAdd(amt?: R, index = 0): R {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (typeof amt === 'undefined') {
+            if (this.mem instanceof BigUint64Array || this.mem instanceof BigInt64Array) {
+                (amt as any) = 1n
+            }
+            else {
+                (amt as any) = 1
+            }
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.add(this.mem as any, this.indx + index, amt as any) as R
+    }
+
+    public atomicSub(amt?: R, index = 0): R {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (typeof amt === 'undefined') {
+            if (this.mem instanceof BigUint64Array || this.mem instanceof BigInt64Array) {
+                (amt as any) = 1n
+            }
+            else {
+                (amt as any) = 1
+            }
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.sub(this.mem as any, this.indx + index, amt as any) as R
+    }
+
+    public atomicAnd(amt?: R, index = 0): R {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (typeof amt === 'undefined') {
+            if (this.mem instanceof BigUint64Array || this.mem instanceof BigInt64Array) {
+                (amt as any) = 1n
+            }
+            else {
+                (amt as any) = 1
+            }
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.and(this.mem as any, this.indx + index, amt as any) as R
+    }
+
+    public atomicOr(val?: R, index = 0): R {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.or(this.mem as any, this.indx + index, val as any) as R
+    }
+
+    public atomicXor(val?: R, index = 0): R {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.or(this.mem as any, this.indx + index, val as any) as R
+    }
+
+    public atomicCmpExch(expected: R, replacement: R, index = 0): R {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.compareExchange(this.mem as any, this.indx + index, expected as any, replacement as any) as R
+    }
+
+    public atomicExchange(replacement: R, index = 0): R {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.exchange(this.mem as any, this.indx + index, replacement as any) as R
+    }
+
+    public atomicStore(replacement: R, index = 0): void {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        Atomics.store(this.mem as any, this.indx + index, replacement as any) as R
+    }
+
+    public atomicLoad(index = 0): R {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.load(this.mem as any, this.indx + index) as R
+    }
+
+    public atomicNotify(cnt: number = Infinity, index = 0): number {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.notify(this.mem as any, this.indx + index, cnt)
+    }
+
+    public atomicNotifyOne(index = 0): number {
+        return this.atomicNotify(1, index)
+    }
+
+    public atomicNotifyAll(index = 0): number {
+        return this.atomicNotify(Infinity, index)
+    }
+
+    public atomicWait(value: R, timeout = Infinity, index = 0): 'ok'|'not-equal'|'timed-out' {
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        return Atomics.wait(this.mem as any, this.indx + index, value as any, timeout)
+    }
+
+    public async atomicWaitAsync(val: R, timeout = Infinity, index = 0): Promise<'ok'|'not-equal'|'timed-out'> {
+        if (!('waitAsync' in Atomics)) {
+            throw new Error("waitAsync not available!")
+        }
+        if (index >= this.cnt) {
+            throw new Error('OUT OF BOUNDS!')
+        }
+        if (!(this.mem instanceof Int32Array || this.mem instanceof BigInt64Array || this.mem instanceof Int16Array
+            || this.mem instanceof Int8Array || this.mem instanceof Uint32Array || this.mem instanceof Uint16Array
+            || this.mem instanceof Uint8Array || this.mem instanceof BigUint64Array)) {
+            throw new Error('INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!')
+        }
+        let {async, value} = (Atomics as any).waitAsync(this.mem as any, this.indx + index, val, timeout)
+        if (async) {
+            value = await value
+        }
+        return value
     }
 }
 

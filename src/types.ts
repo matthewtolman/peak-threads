@@ -14,6 +14,10 @@ export type TypedArray =
     | BigInt64Array<ArrayBufferLike>
     | BigUint64Array<ArrayBufferLike>;
 
+export type BigIntTypedArray =
+    | BigInt64Array<ArrayBufferLike>
+    | BigUint64Array<ArrayBufferLike>;
+
 /**
  * Type string definitions for use with @see make
  */

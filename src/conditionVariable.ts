@@ -1,6 +1,10 @@
 import type {ElementLayout} from "./types.ts";
-import {Address, make} from "./memory.ts";
+import {Address, type DehydratedAddress, make} from "./memory.ts";
 import {Mutex} from "./mutex.ts";
+
+export interface DehydratedConditionVariable {
+    addr: DehydratedAddress<Int32Array>
+}
 
 /**
  * A condition variable that can be shared across threads.
@@ -9,9 +13,9 @@ import {Mutex} from "./mutex.ts";
  * Use @see make for creating a condition variable.
  */
 export class ConditionVariable {
-    private memory: Int32Array
-    private prevOffset: number
-    private valOffset: number
+    private addr: Address<Int32Array>
+    private prevOffset: number = 0
+    private valOffset: number = 1
 
     public static ELEMENT_LAYOUT: ElementLayout = [['int32', 2]]
     public static HYDRATION_KEY = '__threads_ConditionVariable'
@@ -25,7 +29,7 @@ export class ConditionVariable {
         if (address.count() < 2) {
             throw new Error(`Invalid address for Condition Variable! MUST BE AT LEAST 2 ELEMENTS WIDE!`)
         }
-        this.memory = address.memory()
+        this.addr = address
         this.prevOffset = address.offset()
         this.valOffset = address.offset() + 1
     }
@@ -39,22 +43,18 @@ export class ConditionVariable {
 
     /**
      * Hydrates a condition variable from a dehydrated (message-passed) state
-     * @param memory Memory to use
-     * @param offset Maximum number of threads needed (different from current number of threads needed)
      */
-    static hydrate({memory, offset}: { memory: Int32Array, offset: number }) {
-        const addr = new Address(memory, offset, memory.length)
-        return new ConditionVariable(addr)
+    static hydrate({addr}: DehydratedConditionVariable) {
+        return new ConditionVariable(Address.hydrate(addr))
     }
 
     /**
      * Dehydrates a condition variable so it can be passed between threads
      * @param cv Condition variable to dehydrate
      */
-    static dehydrate(cv: ConditionVariable) {
+    static dehydrate(cv: ConditionVariable): DehydratedConditionVariable {
         return {
-            memory: cv.memory,
-            offset: cv.prevOffset,
+            addr: Address.dehydrate(cv.addr)
         }
     }
 
@@ -68,12 +68,12 @@ export class ConditionVariable {
      */
     public wait(mux: Mutex, timeout: number = Infinity) {
         const start = Date.now()
-        const val = Atomics.load(this.memory, this.valOffset)
-        Atomics.store(this.memory, this.prevOffset, val)
+        const val = this.addr.atomicLoad(this.valOffset)
+        this.addr.atomicStore(this.prevOffset, val)
 
         mux.unlock()
 
-        if (Atomics.wait(this.memory, this.valOffset, val, timeout) === 'timed-out') {
+        if (this.addr.atomicWait(val, this.valOffset, timeout) === 'timed-out') {
             return false
         }
 
@@ -104,17 +104,12 @@ export class ConditionVariable {
             throw new Error("waitAsync not available!")
         }
         const start = Date.now()
-        const val = Atomics.load(this.memory, this.valOffset)
-        Atomics.store(this.memory, this.prevOffset, val)
+        const val = this.addr.atomicLoad(this.valOffset)
+        this.addr.atomicStore(this.prevOffset, val)
 
         mux.unlock()
 
-        const {async, value} = (Atomics as any).waitAsync(this.memory, this.valOffset, val, timeout)
-        if (async) {
-            if (await value === 'timed-out') {
-                return false
-            }
-        } else if (value === 'timed-out') {
+        if (await this.addr.atomicWaitAsync(val, timeout, this.valOffset) === 'timed-out') {
             return false
         }
 
@@ -135,8 +130,8 @@ export class ConditionVariable {
      * @param count How many threads to notify (usually 1 or Infinity)
      */
     public notify(count: number = 1) {
-        const val = Atomics.load(this.memory, this.prevOffset)
-        Atomics.store(this.memory, this.valOffset, (val + 1) | 0)
-        Atomics.notify(this.memory, this.valOffset, count)
+        const val = this.addr.atomicLoad(this.prevOffset)
+        this.addr.atomicStore((val + 1) | 0, this.valOffset)
+        this.addr.atomicNotify(count, this.valOffset)
     }
 }

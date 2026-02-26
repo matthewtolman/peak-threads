@@ -1,6 +1,8 @@
 import type {ElementLayout} from "./types.ts";
-import {Mutex} from './mutex.ts'
-import {Address, make} from './memory.ts'
+import {type DehydratedMutex, Mutex} from './mutex.ts'
+import {Address, type DehydratedAddress, make} from './memory.ts'
+
+export interface DehydratedBarrier{ mux: DehydratedMutex, addr: DehydratedAddress<Int32Array>, maxNeeded: number }
 
 /**
  * A synchronization barrier that can be shared across threads.
@@ -9,34 +11,37 @@ import {Address, make} from './memory.ts'
  * Use @see make for creating a barrier.
  */
 export class Barrier {
-    private memory: Int32Array
+    private addr: Address<Int32Array>
     private mutex: Mutex
     private maxNeeded: number
-    private stillNeededOffset: number
-    private eventOffset: number
+    private stillNeededOffset: number = 0
+    private eventOffset: number = 1
 
-    public static ELEMENT_LAYOUT: ElementLayout = [['int32', 3]]
+    public static ELEMENT_LAYOUT: ElementLayout = Mutex.ELEMENT_LAYOUT.concat([['int32', 2]])
     public static HYDRATION_KEY = '__threads_Barrier'
 
     /**
      * Creates a new barrier. Prefer calling @see make
-     * @param address The address for the barrier (must be 3 32-bit signed integers in size)
+     * @param mux The mutex (or address for the mutex) to use for the barrier
+     * @param addr The address to store barrier-state into
      * @param needed How many threads must hit the barrier before proceeding
      * @param initMem Whether to initialize the memory or not (only pass true on one-thread; sending a barrier will set this to false on hydration)
      */
-    constructor(address: Address<Int32Array>, needed: number, initMem: boolean = true) {
-        this.mutex = new Mutex(address)
-        this.memory = address.memory()
+    constructor(mux: Address<Int32Array>|Mutex, addr: Address<Int32Array>, needed: number, initMem: boolean = true) {
+        if (mux instanceof Address) {
+            this.mutex = new Mutex(mux)
+        }
+        else {
+            this.mutex = mux
+        }
+        this.addr = addr
         this.maxNeeded = needed
-        if (address.memory().length < 3) {
-            throw new Error("INVALID ADDRESS! MUST BE AT LEAST 3 INT32 WIDE!")
+        if (addr.count() < 2) {
+            throw new Error("INVALID ADDRESS! MUST BE AT LEAST 2 INT32 WIDE!")
         }
 
-        this.stillNeededOffset = address.offset() + 1
-        this.eventOffset = address.offset() + 2
-
         if (initMem) {
-            this.memory.set([this.maxNeeded], this.stillNeededOffset)
+            this.addr.set(this.maxNeeded, this.stillNeededOffset)
         }
     }
 
@@ -52,24 +57,20 @@ export class Barrier {
 
     /**
      * Hydrates a barrier from a dehydrated (message-passed) state
-     * @param memory Memory to use
-     * @param offset Offset in memory to use
-     * @param maxNeeded Maximum number of threads needed (different from current number of threads needed)
      */
-    static hydrate({memory, offset, maxNeeded}: { memory: Int32Array, offset: number, maxNeeded: number }) {
-        const addr = new Address(memory, offset)
-        return new Barrier(addr, maxNeeded, false)
+    static hydrate({mux, addr, maxNeeded}: DehydratedBarrier) {
+        return new Barrier(Mutex.hydrate(mux), Address.hydrate(addr), maxNeeded, false)
     }
 
     /**
      * Dehydrates a barrier so it can be passed between threads
      * @param b Barrier to dehydrate
      */
-    static dehydrate(b: Barrier) {
+    static dehydrate(b: Barrier): DehydratedBarrier {
         return {
-            memory: b.memory,
-            offset: Mutex.dehydrate(b.mutex).offset,
-            maxNeeded: b.maxNeeded
+            mux: Mutex.dehydrate(b.mutex),
+            addr: Address.dehydrate(b.addr),
+            maxNeeded: b.maxNeeded,
         }
     }
 
@@ -78,15 +79,16 @@ export class Barrier {
      */
     public wait() {
         this.mutex.lock()
-        this.memory.set([this.memory.at(this.stillNeededOffset)!! - 1], this.stillNeededOffset)
-        if (this.memory.at(this.stillNeededOffset)!! > 0) {
-            const e = this.memory.at(this.eventOffset)!!
+        this.addr.set(this.addr.get(this.stillNeededOffset) - 1, this.stillNeededOffset)
+
+        if (this.addr.get(this.stillNeededOffset) > 0) {
+            const e = this.addr.get(this.eventOffset)!!
             this.mutex.unlock()
-            Atomics.wait(this.memory, this.eventOffset, e)
+            this.addr.atomicWait(e, Infinity, this.eventOffset)
         } else {
-            Atomics.add(this.memory, this.eventOffset, 1)
-            this.memory.set([this.maxNeeded], this.stillNeededOffset)
-            Atomics.notify(this.memory, this.eventOffset)
+            this.addr.atomicAdd(1, this.eventOffset)
+            this.addr.set(this.maxNeeded, this.stillNeededOffset)
+            this.addr.atomicNotifyAll(this.eventOffset)
             this.mutex.unlock()
         }
     }
@@ -99,21 +101,15 @@ export class Barrier {
             throw new Error("waitAsync not available!")
         }
         await this.mutex.lockAsync()
-        this.memory.set([this.memory.at(this.stillNeededOffset)!! - 1], this.stillNeededOffset)
-        if (this.memory.at(this.stillNeededOffset)!! > 0) {
-            const e = this.memory.at(this.eventOffset)!!
+        this.addr.set(this.addr.get(this.stillNeededOffset) - 1, this.stillNeededOffset)
+        if (this.addr.get(this.stillNeededOffset) > 0) {
+            const e = this.addr.get(this.eventOffset)
             this.mutex.unlock()
-            const {async, value} = (Atomics as any).waitAsync(this.memory, this.eventOffset, e)
-            if (async) {
-                await value
-            }
-            else {
-                await new Promise((resolve) => resolve(null))
-            }
+            await this.addr.atomicWaitAsync(e, Infinity, this.eventOffset)
         } else {
-            Atomics.add(this.memory, this.eventOffset, 1)
-            this.memory.set([this.maxNeeded], this.stillNeededOffset)
-            Atomics.notify(this.memory, this.eventOffset)
+            this.addr.atomicAdd(1, this.eventOffset)
+            this.addr.set(this.maxNeeded, this.stillNeededOffset)
+            this.addr.atomicNotifyAll(this.eventOffset)
             this.mutex.unlock()
         }
     }

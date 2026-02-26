@@ -1,5 +1,9 @@
 import type {ElementLayout} from "./types.ts";
-import {Address, make} from "./memory.ts";
+import {Address, type DehydratedAddress, make} from "./memory.ts";
+
+export interface DehydratedMutex {
+    addr: DehydratedAddress<Int32Array>
+}
 
 export class Mutex {
     private static unlocked = 0
@@ -9,27 +13,23 @@ export class Mutex {
     public static ELEMENT_LAYOUT: ElementLayout = [['int32', 2]]
     public static HYDRATION_KEY = '__threads_Mutex'
 
-    private memory: Int32Array
-    private offset: number
+    private addr: Address<Int32Array>
 
     constructor(address: Address<Int32Array>) {
-        this.memory = address.memory()
-        this.offset = address.offset()
+        this.addr = address
     }
 
     static make() {
         return make(Mutex)
     }
 
-    static hydrate({memory, offset}: { memory: Int32Array, offset: number }) {
-        const addr = new Address(memory, offset)
-        return new Mutex(addr)
+    static hydrate({addr}: DehydratedMutex) {
+        return new Mutex(Address.hydrate(addr))
     }
 
-    static dehydrate(mux: Mutex) {
+    static dehydrate(mux: Mutex): DehydratedMutex {
         return {
-            memory: mux.memory,
-            offset: mux.offset,
+            addr: Address.dehydrate(mux.addr)
         }
     }
 
@@ -42,19 +42,21 @@ export class Mutex {
      * @returns {boolean} True if got the lock, false if timed out
      */
     public lock(timeout: number = Infinity): boolean {
-        if (Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.locked) === Mutex.unlocked) {
-            return true /* got the lock */
+        if (this.addr.atomicCmpExch(Mutex.unlocked, Mutex.locked) === Mutex.unlocked) {
+            return true; /* got the lock */
         }
+
         let lastTime = Date.now()
 
         while (true) {
-            Atomics.compareExchange(this.memory, this.offset, Mutex.locked, Mutex.contended)
-            const r = Atomics.wait(this.memory, this.offset, Mutex.contended, timeout)
+            this.addr.atomicCmpExch(Mutex.locked, Mutex.contended)
+
+            const r = this.addr.atomicWait(Mutex.contended, timeout)
             if (r === "timed-out") {
                 return false
             }
 
-            if (Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.contended) === Mutex.unlocked) {
+            if (this.addr.atomicCmpExch(Mutex.unlocked, Mutex.contended) === Mutex.unlocked) {
                 return true /* got the lock */
             }
 
@@ -80,32 +82,22 @@ export class Mutex {
         if (!('waitAsync' in Atomics)) {
             throw new Error("waitAsync not available!")
         }
-        let cur = Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.locked)
-        if (cur === Mutex.unlocked) {
-            return true /* got the lock */
+        if (this.addr.atomicCmpExch(Mutex.unlocked, Mutex.locked) === Mutex.unlocked) {
+            return true; /* got the lock */
         }
+
         let lastTime = Date.now()
 
         while (true) {
-            if (cur !== Mutex.contended) {
-                Atomics.compareExchange(this.memory, this.offset, cur, Mutex.contended)
-            }
-            const {async, value} = (Atomics as any).waitAsync(this.memory, this.offset, Mutex.contended, timeout)
-            if (async) {
-                const r = await value
-                if (r === 'timed-out') {
-                    return false
-                }
-            } else if (value === 'timed-out') {
+            this.addr.atomicCmpExch(Mutex.locked, Mutex.contended)
+
+            const r = await this.addr.atomicWaitAsync(Mutex.contended, timeout)
+            if (r === 'timed-out') {
                 return false
             }
-            else {
-                await new Promise((resolve) => resolve(null))
-            }
 
-            cur = Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.contended)
-            if (cur === Mutex.unlocked) {
-                return true /* got the lock */
+            if (this.addr.atomicCmpExch(Mutex.unlocked, Mutex.contended) === Mutex.unlocked) {
+                return true; /* got the lock */
             }
 
             if (Number.isFinite(timeout)) {
@@ -126,17 +118,16 @@ export class Mutex {
      */
     public tryLock() {
         // Try to get the lock (will only lock if we're unlocked)
-        let cur = Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.locked)
-        return cur === Mutex.unlocked;
+        return this.addr.atomicCmpExch(Mutex.unlocked, Mutex.locked) === Mutex.unlocked
     }
 
     /**
      * Unlocks the mutex
      */
     public unlock() {
-        if (Atomics.sub(this.memory, this.offset, 1) === Mutex.contended) {
-            Atomics.store(this.memory, this.offset, Mutex.unlocked)
-            Atomics.notify(this.memory, this.offset, 1)
+        if (this.addr.atomicSub() !== Mutex.locked) {
+            this.addr.atomicStore(Mutex.unlocked)
+            this.addr.atomicNotifyOne()
         }
     }
 }

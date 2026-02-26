@@ -21,14 +21,11 @@ self.onwork = async (w) => {
         try {
             const val = (memory.at(0) || 0)
             memory.set([val + 1], 0)
-            const l = Atomics.load(threads.Mutex.dehydrate(mutex).memory, 0)
-            if (l === 0) {
-                console.error('BAD UNLOCK DETECTED!')
-            }
             await new Promise((res) => {
-                setTimeout(() => res(), 10)
+                setTimeout(() => res(), 1)
             })
-        } finally {
+        }
+        finally {
             mutex.unlock()
         }
     }

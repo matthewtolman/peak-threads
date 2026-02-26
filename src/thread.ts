@@ -8,6 +8,119 @@ import {Semaphore} from "./semaphore.ts";
 let curThreadId = 'main'
 let incThreadId = 0
 
+/*
+let chanId = 0
+
+const inChans: {[chanId: string]: ReceiveChannel} = {}
+const outChans: {[chanId: string]: SendChannel<unknown>} = {}
+const initChans: {[chanId: string]: [{res: () => void, rej: (err: any) => void}]} = {}
+
+function nextChanId() {
+    return `${curThreadId}<>${++chanId}`
+}
+
+export class SendChannel<T = any> {
+    public static HYDRATION_KEY = '__threads_Channel'
+    private closed: boolean = false
+    private id: string
+    private ports: Array<Worker|MessagePort> = []
+    private pos: Address<Int32Array>
+
+    private constructor( id: string) {
+        this.id = id
+    }
+
+    static new<T = any>(port: Worker|MessagePort) {
+        return new SendChannel<T>(nextChanId(), port)
+    }
+
+    static hydrate(_: any) {
+        throw new Error('CANNOT SEND A SendChannel!')
+    }
+
+    static dehydrate(_: any) {
+        throw new Error('CANNOT SEND A SendChannel!')
+    }
+
+    public async forwardTo(thread: Thread, message?: any) {
+        await new Promise<void>((res, rej) => {
+            initChans[this.id] = initChans[this.id] || []
+            initChans[this.id].push({res, rej})
+            thread.raw().postMessage({__system: true, __channel: this.id, __type: 'make_receiver', message})
+        })
+        this.ports.push(thread.raw())
+    }
+
+    public send(message: T) {
+        if (this.closed) {
+            throw new Error('Cannot send to a closed channel')
+        }
+        this.port.postMessage({__system: true, __channel: this.id, __type: 'message', message})
+    }
+
+    public close() {
+        if (this.closed) {
+            throw new Error('Cannot close closed channel!')
+        }
+        this.port.postMessage({__system: true, __channel: this.id, __type: 'close'})
+        delete outChans[this.id]
+    }
+}
+
+export class ReceiveChannel<T = any> {
+    public static HYDRATION_KEY = undefined
+    private id: string
+    private buffer: T[] = []
+    private closed: boolean = false
+    private waitResolvers: ((_: T|undefined) => void)[] = []
+
+    constructor(id: string) {
+        this.id = id
+    }
+
+    static hydrate(_: any) {
+        throw new Error('CANNOT SEND A ReceiveChannel!!')
+    }
+
+    static dehydrate(_: any) {
+        throw new Error('CANNOT SEND A ReceiveChannel!')
+    }
+
+    public __queue_msg(msg: T) {
+        if (this.waitResolvers.length) {
+            this.waitResolvers[0](msg)
+            this.waitResolvers.shift()
+        }
+        else {
+            this.buffer.push(msg)
+        }
+    }
+
+    public __close_chan() {
+        this.closed = true
+        for (const res of this.waitResolvers) {
+            res(undefined)
+        }
+        delete inChans[this.id]
+    }
+
+    public async receive(): Promise<T|undefined> {
+        if (this.buffer.length) {
+            return this.buffer.shift()
+        }
+        else if (this.closed) {
+            return undefined
+        }
+        else {
+            const p = new Promise<T|undefined>(res => {
+                this.waitResolvers.push(res)
+            })
+            return await p
+        }
+    }
+}
+*/
+
 /**
  * Definition of a class-based dehydration registration where the dehydration information is on the class.
  *
@@ -278,6 +391,7 @@ export interface ThreadOptions {
  *  - If there is both a `share` and `shareId` field, then it is a share request. The `onshare` method will be called if it exists, or `onevent` will be called
  *  - If there is `transfer` field, then it indicates a transfer request. The `ontransfer` method will be called if it exists, or `onevent` will be called
  *  - If there is both a `threadId` and an `init` field, then it is an initialization event. The `oninit` handler will be called if it is set
+ *  - If there is a `__channel` field, then it indicates it is a "channel control" event (e.g. make, send, close). When a channel is made, `onchannel` is called
  *  - Otherwise, it is considered an "invalid system event" and an error is thrown
  *
  * The `onshare`, `oninit`, `ontransfer`, and `onwork` handlers can return promises. In those cases the promise will be awaited prior to sending the response event.
@@ -292,6 +406,7 @@ export interface ThreadOptions {
  * In that case, the `onevent` method is called.
  * In this case, there is no awaiting, no returning the response, and no sending messages back to the main thread.
  * If messages do need to be sent back, then for custom events the `postMessage` function must be called explicitly.
+ *
  */
 export class Thread {
     private worker: Worker
