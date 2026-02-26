@@ -74,6 +74,7 @@ export class WaitGroup {
      * @return true on success, false on timeout
      */
     public wait(timeout: number = Infinity) {
+        let lastTime = Date.now()
         while (true) {
             const cur = Atomics.load(this.memory, this.offset);
             if (cur == 0) {
@@ -82,6 +83,16 @@ export class WaitGroup {
 
             if (Atomics.wait(this.memory, this.offset, cur, timeout) === 'timed-out') {
                 return false
+            }
+
+            if (Number.isFinite(timeout)) {
+                let curTime = Date.now()
+                let elapsed = curTime - lastTime
+                timeout -= elapsed
+                lastTime = curTime
+                if (timeout <= 0) {
+                    return false
+                }
             }
         }
     }
@@ -95,9 +106,11 @@ export class WaitGroup {
         if (!('waitAsync' in Atomics)) {
             throw new Error("waitAsync not available!")
         }
+
+        let lastTime = Date.now()
         while (true) {
             const cur = Atomics.load(this.memory, this.offset);
-            if (cur == 0) {
+            if (cur === 0) {
                 return true;
             }
 
@@ -108,6 +121,19 @@ export class WaitGroup {
                 }
             } else if (value === 'timed-out') {
                 return false
+            }
+            else {
+                await new Promise((resolve) => resolve(null))
+            }
+
+            if (Number.isFinite(timeout)) {
+                let curTime = Date.now()
+                let elapsed = curTime - lastTime
+                timeout -= elapsed
+                lastTime = curTime
+                if (timeout <= 0) {
+                    return false
+                }
             }
         }
     }

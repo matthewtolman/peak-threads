@@ -99,6 +99,9 @@ export class Mutex {
             } else if (value === 'timed-out') {
                 return false
             }
+            else {
+                await new Promise((resolve) => resolve(null))
+            }
 
             cur = Atomics.compareExchange(this.memory, this.offset, Mutex.unlocked, Mutex.contended)
             if (cur === Mutex.unlocked) {

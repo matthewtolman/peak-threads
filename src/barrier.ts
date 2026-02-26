@@ -107,6 +107,9 @@ export class Barrier {
             if (async) {
                 await value
             }
+            else {
+                await new Promise((resolve) => resolve(null))
+            }
         } else {
             Atomics.add(this.memory, this.eventOffset, 1)
             this.memory.set([this.maxNeeded], this.stillNeededOffset)

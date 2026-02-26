@@ -128,7 +128,10 @@ export class Semaphore {
                 }
             } else if (value === 'timed-out') {
                 return false
+            } else {
+                await new Promise((resolve) => resolve(null))
             }
+
             Atomics.sub(this.memory, this.waiterOffset, 1);
             if (Number.isFinite(timeout)) {
                 let curTime = Date.now()
