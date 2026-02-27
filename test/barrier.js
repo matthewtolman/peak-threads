@@ -1,4 +1,5 @@
 importScripts("/dist/threads.iife.js")
+threads.setLogging(true)
 
 /**
  * @type Barrier

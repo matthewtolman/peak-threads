@@ -6,6 +6,8 @@ export interface DehydratedSemaphore {
     value: number
 }
 
+let held: Semaphore[] = []
+
 /**
  * A semaphore is a counting lock mechanism where there are n "resources" and a thread can acquire one of them
  * If a "resource" is not available, then it waits and blocks
@@ -58,6 +60,20 @@ export class Semaphore {
             addr: Address.dehydrate(s.addr),
             value: s.value
         }
+    }
+
+    /**
+     * Gets a list of all semaphores currently held by the current thread
+     */
+    static allHeld(): Semaphore[] {
+        return held
+    }
+
+    /**
+     * Checks if we have acquired the semaphore
+     */
+    public hasAcquired(): boolean {
+        return held.indexOf(this) >= 0
     }
 
     /**

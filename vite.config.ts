@@ -1,5 +1,6 @@
 import { resolve } from 'path'
 import {defineConfig} from "vite";
+import dts from 'unplugin-dts/vite'
 
 export default defineConfig({
     build: {
@@ -9,6 +10,7 @@ export default defineConfig({
             name: 'threads',
             formats: ['es', 'cjs', 'umd', 'iife'],
             fileName: (format) => `threads.${format}.js`
-        }
-    }
+        },
+    },
+    plugins: [dts()]
 })

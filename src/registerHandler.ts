@@ -1,4 +1,4 @@
-export function RegisterHandler(handler: (_: any) => any, type = 'event') {
+export function RegisterHandler(handler: (_?: any) => any, type = 'event') {
     if (self) {
         switch (type) {
             case 'init':
@@ -15,6 +15,9 @@ export function RegisterHandler(handler: (_: any) => any, type = 'event') {
                 break
             case 'work':
                 (self as any).onwork = handler
+                break
+            case 'close':
+                (self as any).onclose = handler
                 break
         }
     } else {

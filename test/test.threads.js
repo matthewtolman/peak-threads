@@ -1,13 +1,15 @@
 const {Barrier, ThreadPool, Thread, Mutex, make, ConditionVariable, WaitGroup, Semaphore} = threads
 
 describe('Thread', () => {
+    threads.setLogging(false)
+
     it('is setup', async () => {
-        const thread = await Thread.spawn('worker1.js')
+        const thread = await Thread.spawn('worker1.js', {closeWhenIdle: 100})
         expect(thread).to.not.be.null
     })
 
     it('can create thread', async () => {
-        const thread = await Thread.spawn('worker1.js')
+        const thread = await Thread.spawn('worker1.js', {closeWhenIdle: 100})
         expect(thread).to.not.be.null
         expect(await thread.sendWork(4)).to.equal(16)
     })
@@ -20,7 +22,7 @@ describe('Thread', () => {
         const handler = (v) => {
             resolve(v.data)
         }
-        const thread = await Thread.spawn('worker1.js', {initData: 45, onEventHandler: handler})
+        const thread = await Thread.spawn('worker1.js', {initData: 45, onEventHandler: handler, closeWhenIdle: 100})
         expect(thread).to.not.be.null
         expect(await thread.sendWork(4)).to.equal(16)
         thread.sendEvent(-23)
@@ -35,12 +37,17 @@ describe('Thread', () => {
         const handler = (v) => {
             resolve(v.data)
         }
-        const thread = await Thread.spawn('worker1.js', {initData: 45, onEventHandler: handler})
+        const thread = await Thread.spawn('worker1.js', {initData: 45, onEventHandler: handler, closeWhenIdle: 100})
         expect(thread).to.not.be.null
 
         await thread.share(99)
         expect(await thread.sendWork(4)).to.equal(16)
         thread.sendEvent(-23)
+
+        // graceful shutdown
+        thread.close()
+
+        // should still be able to await for the response back
         expect(await p).to.equal(99)
     })
 
@@ -61,7 +68,7 @@ describe('Thread', () => {
         expect(await p).to.equal(55)
     })
 
-    it('transfer handler', async () => {
+    it('transfer handler can be called', async () => {
         let resolve
         const p = new Promise((res) => {
             resolve = res
@@ -76,6 +83,47 @@ describe('Thread', () => {
         expect(await thread.sendWork(4)).to.equal(16)
         thread.sendEvent(-23)
         expect(await p).to.equal(99)
+    })
+
+    it('transfer handler transfers ownership', async () => {
+        let resolve
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (v) => {
+            resolve(v.data)
+        }
+        const ab = new ArrayBuffer(64)
+        const ints = new Int32Array(ab)
+        ints.set([99], 0)
+        const thread = await Thread.spawn('worker2.js', {initData:45, onEventHandler:handler})
+        expect(thread).to.not.be.null
+
+        await thread.transfer(ints, ints.buffer)
+        thread.sendEvent(-23)
+        expect(await p).to.equal(99)
+
+        expect(() => ints.at(0)).to.throw()
+    })
+
+    it('can transfer back', async () => {
+        let resolve
+        let ints = new Int32Array(new ArrayBuffer(64))
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (e) => {
+            const {result, buff} = e.data
+            ints = buff
+            resolve(result)
+        }
+        ints.set([99], 0)
+        const thread = await Thread.spawn('worker3.js', {initData:45, onEventHandler:handler})
+        expect(thread).to.not.be.null
+
+        await thread.transfer(ints, ints.buffer)
+        expect(await p).to.equal(99)
+        expect(ints.at(0)).to.equal(99)
     })
 })
 

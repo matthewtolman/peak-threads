@@ -5,6 +5,8 @@ export interface DehydratedMutex {
     addr: DehydratedAddress<Int32Array>
 }
 
+let held: Mutex[] = []
+
 export class Mutex {
     private static unlocked = 0
     private static locked = 1
@@ -15,22 +17,44 @@ export class Mutex {
 
     private addr: Address<Int32Array>
 
+    /**
+     * Creates a new Mutex (recommended to use the static @see make function)
+     * @param address
+     */
     constructor(address: Address<Int32Array>) {
         this.addr = address
     }
 
+    /**
+     * Makes a new Mutex (handles allocating shared array buffers)
+     */
     static make() {
         return make(Mutex)
     }
 
+    /**
+     * Hydreates a mutex from a dehydrated (message passed) state
+     * @param addr Dehydrated address
+     */
     static hydrate({addr}: DehydratedMutex) {
         return new Mutex(Address.hydrate(addr))
     }
 
+    /**
+     * Dehydrates a mutex (prepares it for message passsing)
+     * @param mux Mutex to dehydrate
+     */
     static dehydrate(mux: Mutex): DehydratedMutex {
         return {
             addr: Address.dehydrate(mux.addr)
         }
+    }
+
+    /**
+     * Gets a list of all held mutexes
+     */
+    static allHeld(): Mutex[] {
+        return held
     }
 
     /**
@@ -43,6 +67,7 @@ export class Mutex {
      */
     public lock(timeout: number = Infinity): boolean {
         if (this.addr.atomicCmpExch(Mutex.unlocked, Mutex.locked) === Mutex.unlocked) {
+            held.push(this)
             return true; /* got the lock */
         }
 
@@ -57,6 +82,7 @@ export class Mutex {
             }
 
             if (this.addr.atomicCmpExch(Mutex.unlocked, Mutex.contended) === Mutex.unlocked) {
+                held.push(this)
                 return true /* got the lock */
             }
 
@@ -73,6 +99,13 @@ export class Mutex {
     }
 
     /**
+     * Checks if we have a lock on the mutex
+     */
+    public hasLock(): boolean {
+        return held.indexOf(this) >= 0
+    }
+
+    /**
      * Asynchronously locks a mutex.
      * Returns a promise which resolves to true if the lock was obtained, or false otherwise
      * @param timeout Timeout (in milliseconds) for obtaining the lock
@@ -83,6 +116,7 @@ export class Mutex {
             throw new Error("waitAsync not available!")
         }
         if (this.addr.atomicCmpExch(Mutex.unlocked, Mutex.locked) === Mutex.unlocked) {
+            held.push(this)
             return true; /* got the lock */
         }
 
@@ -97,6 +131,7 @@ export class Mutex {
             }
 
             if (this.addr.atomicCmpExch(Mutex.unlocked, Mutex.contended) === Mutex.unlocked) {
+                held.push(this)
                 return true; /* got the lock */
             }
 
@@ -118,7 +153,11 @@ export class Mutex {
      */
     public tryLock() {
         // Try to get the lock (will only lock if we're unlocked)
-        return this.addr.atomicCmpExch(Mutex.unlocked, Mutex.locked) === Mutex.unlocked
+        const r = this.addr.atomicCmpExch(Mutex.unlocked, Mutex.locked) === Mutex.unlocked
+        if (r) {
+            held.push(this)
+        }
+        return r
     }
 
     /**
@@ -129,5 +168,6 @@ export class Mutex {
             this.addr.atomicStore(Mutex.unlocked)
             this.addr.atomicNotifyOne()
         }
+        held.splice(held.indexOf(this), 1)
     }
 }

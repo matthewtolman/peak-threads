@@ -3,7 +3,8 @@ import {Thread} from "./thread.ts";
 export interface ThreadPoolOptions {
     initData?: any,
     schedulerStrategy?: ((threads: Thread[]) => Thread),
-    numThreads?: number
+    numThreads?: number,
+    closeThreadIdle?: number
 }
 
 /**
