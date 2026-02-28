@@ -5,6 +5,17 @@ and then easily communicate with those threads. This includes sending work, shar
 and having locks, wait groups, condition variables, and other shared memory synchronization mechanisms (note: for the shared
 memory to work, you must be in a secure context and be cross-origin isolated!).
 
+[API reference](https://peak-threads.matthewtolman.dev) documentation is available online.
+[Primary development repository](https://git.matthewtolman.dev/mtolman/peak-threads) available online.
+[Mirror repository and issue tracker](https://github.com/matthewtolman/peak-threads) available on GitHub.
+[NPM](https://www.npmjs.com/package/peak-threads).
+
+## Installation
+
+```bash
+npm i -S peak-threads
+```
+
 ## General Usage
 
 Here is an example of general usage.
