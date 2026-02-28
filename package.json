@@ -1,5 +1,5 @@
 {
-  "name": "@matttolman/threads",
+  "name": "threads",
   "version": "0.0.0",
   "type": "module",
   "main": "./dist/threads.umd.js",
