@@ -304,7 +304,20 @@ export interface ThreadOptions {
     /**
      * Custom handler for when a thread is closed/killed
      */
-    closeHandler?: (thread: Thread) => any
+    closeHandler?: (thread: Thread) => any,
+    /**
+     * Type option to pass directly to the worker constructor. Often set to "module" when using esm modules
+     */
+    type?: 'classic'|'module',
+    /**
+     * Name option to pass directly to the worker constructor. Mostly useful for debugging purposes.
+     * NOTE: this does not impact the peaks-threads id assigned to each worker
+     */
+    name?: string,
+    /**
+     * Determines how credentials are sent when using `fetch()` which will be passed directly to the worker constructor
+     */
+    credentials?: 'omit'|'same-origin'|'include',
 }
 
 /**
@@ -400,7 +413,21 @@ export class Thread {
         const threadId = this.threadId
         doLogs && console.log(curThreadId, 'Spawning thread' + this.threadId)
 
-        this.worker = new Worker(script)
+        const workerOpts: any = {}
+
+        if (options?.type) {
+            workerOpts.type = options.type
+        }
+
+        if (options?.name) {
+            workerOpts.name = options.name
+        }
+
+        if (options?.credentials) {
+            workerOpts.credentials = options.credentials
+        }
+
+        this.worker = new Worker(script, workerOpts)
 
         const oldPostMessage = this.worker.postMessage.bind(this.worker)
         this.worker.postMessage = (function (message: any, ...args: any[]) {

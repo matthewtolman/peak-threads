@@ -9,9 +9,9 @@
   "types": "./dist/threads.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/threads.d.ts",
       "import": "./dist/threads.es.js",
-      "require": "./dist/threads.umd.js",
-      "types": "./dist/threads.d.ts"
+      "require": "./dist/threads.umd.js"
     }
   },
   "scripts": {
