@@ -144,12 +144,24 @@ export class ThreadPool {
                         return
                     }
                     this.threads[threadObj.indx].live = false
-                    this.threads[threadObj.indx].initPromise = Thread.spawn(script, {initData, closeHandler: close})
+                    this.threads[threadObj.indx].initPromise = Thread.spawn(script, {
+                        initData,
+                        closeHandler: close,
+                        type: this.options?.type,
+                        name: this.options?.name,
+                        credentials: this.options?.credentials,
+                    })
                     this.threads[threadObj.indx].thread = await this.threads[i].initPromise!!
                     this.threads[threadObj.indx].live = true
                     this.threads[threadObj.indx].initPromise = undefined
                 }
-                threadObj.thread = await Thread.spawn(script, {initData, closeHandler: close})
+                threadObj.thread = await Thread.spawn(script, {
+                    initData,
+                    closeHandler: close,
+                    type: this.options?.type,
+                    name: this.options?.name,
+                    credentials: this.options?.credentials,
+                })
                 this.threads[threadObj.indx] = threadObj
                 this.lastLive = i + 1
             } catch (e) {
@@ -330,7 +342,10 @@ export class ThreadPool {
                 {
                     initData: this.options.initData,
                     closeHandler: close,
-                    closeWhenIdle: this.options.closeThreadWhenIdle
+                    closeWhenIdle: this.options.closeThreadWhenIdle,
+                    type: this.options?.type,
+                    name: this.options?.name,
+                    credentials: this.options?.credentials,
                 }
             )
             this.threads[threadObj.indx].thread = await this.threads[i].initPromise!!
