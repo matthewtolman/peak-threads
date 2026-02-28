@@ -1,3 +1,9 @@
 src/
 public/
 test/
+docs/
+index.html
+serve.js
+vite.config.json
+.idea/
+dist/*.map
