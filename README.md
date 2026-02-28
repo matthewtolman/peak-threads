@@ -1,6 +1,6 @@
-# Threads JS
+# Peaks Threads
 
-Threads JS (or threads for short) is a JavaScript/TypeScript threading library for the browser. It allows sites to spawn threads (via the Workers API)
+Peaks Threads (or threads for short) is a JavaScript/TypeScript threading library for the browser. It allows sites to spawn threads (via the Workers API)
 and then easily communicate with those threads. This includes sending work, sharing or transferring resources, pooling threads,
 and having locks, wait groups, condition variables, and other shared memory synchronization mechanisms (note: for the shared
 memory to work, you must be in a secure context and be cross-origin isolated!).

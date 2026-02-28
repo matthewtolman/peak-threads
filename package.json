@@ -1,10 +1,12 @@
 {
-  "name": "threads",
-  "version": "0.0.0",
+  "name": "peaks-threads",
+  "private": false,
+  "version": "0.1.2",
   "type": "module",
   "main": "./dist/threads.umd.js",
   "module": "./dist/threads.es.js",
   "browser": "./dist/threads.iife.js",
+  "types": "./dist/main.d.ts",
   "exports": {
     ".": {
       "import": "./dist/threads.es.js",
@@ -20,12 +22,10 @@
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
-    "@vitest/browser-playwright": "^4.0.18",
     "express": "^5.2.1",
     "typedoc": "^0.28.17",
     "typescript": "~5.9.3",
     "unplugin-dts": "^1.0.0-beta.6",
-    "vite": "^7.3.1",
-    "vitest": "^4.0.18"
+    "vite": "^7.3.1"
   }
 }
