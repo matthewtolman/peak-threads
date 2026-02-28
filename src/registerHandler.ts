@@ -36,6 +36,6 @@ export function registerHandler(type: 'init'|'event'|'share'|'transfer'|'work'|'
                 break
         }
     } else {
-        throw new Error('RegisterHandler only usable from worker thread!')
+        throw new Error('registerHandler only usable from worker thread!')
     }
 }

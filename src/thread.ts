@@ -308,7 +308,7 @@ export interface ThreadOptions {
     /**
      * Type option to pass directly to the worker constructor. Often set to "module" when using esm modules
      */
-    type?: 'classic'|'module',
+    type?: 'classic' | 'module',
     /**
      * Name option to pass directly to the worker constructor. Mostly useful for debugging purposes.
      * NOTE: this does not impact the peaks-threads id assigned to each worker
@@ -317,7 +317,7 @@ export interface ThreadOptions {
     /**
      * Determines how credentials are sent when using `fetch()` which will be passed directly to the worker constructor
      */
-    credentials?: 'omit'|'same-origin'|'include',
+    credentials?: 'omit' | 'same-origin' | 'include',
 }
 
 /**
@@ -760,6 +760,69 @@ function promiseLike(p: any) {
     return p && (p instanceof Promise || ((typeof p === 'object' || typeof p === 'function') && 'then' in p && typeof p?.then === 'function'))
 }
 
+let threadIdleTimeout: any = null
+let threadIdle: number = 0
+let messagesProcessing: number = 0;
+
+/**
+ * Sends an error back to the parent thread. Useful to indicate a failure that happened locally to the parent process.
+ *
+ * **ONLY USABLE FROM CHILD THREADS!**
+ *
+ * @param err Error to send
+ */
+export function sendError(err: any) {
+    if (self) {
+        postMessage({__system: true, __error: err})
+    } else {
+        throw new Error('sendError only usable from worker thread!')
+    }
+}
+
+/**
+ * Gets the number of messages currently being processed in the current thread.
+ *
+ * **ONLY USABLE FROM CHILD THREADS!**
+ *
+ */
+export function numMessagesProcessing(): number {
+    if (self) {
+        return messagesProcessing
+    } else {
+        throw new Error('numMessagesProcessing only usable from worker thread!')
+    }
+}
+
+/**
+ * Gets the current peaks-threads assigned thread id
+ */
+export function curThread(): string {
+    return curThreadId
+}
+
+/**
+ * Transfers ownership of a resource to the parent thread
+ *
+ * **ONLY USABLE FROM CHILD THREADS!**
+ *
+ * @param message Message for the transfer (usually includes how to access the transferred resource)
+ * @param items Memory ownership to transfer
+ */
+export function transfer(message: any, items: any[]) {
+    if (self) {
+        if (!Array.isArray(items)) {
+            if (!items) {
+                items = []
+            } else {
+                items = [items]
+            }
+        }
+        postMessage({__system: true, transfer: true, message, items}, {transfer: items})
+    } else {
+        throw new Error('transfer only usable from worker thread!')
+    }
+}
+
 if (typeof self !== 'undefined') {
     const oldPostMessage = self.postMessage
     self.postMessage = (function (message: any, ...args: any[]) {
@@ -824,36 +887,19 @@ if (typeof self !== 'undefined') {
                 console.log(curThreadId, 'Closed thread')
                 oldClose()
             })
-    })
-
-    let threadIdleTimeout: any = null
-    let threadIdle: number = 0
-    let messagesProcessing: number = 0
-
-    function sendError(err: any) {
-        postMessage({__system: true, __error: err})
-    }
+    });
 
     /**
      * Gets the number of messages currently being processed
      */
-    (self as any).numMessagesProcessing = () => messagesProcessing;
+    (self as any).numMessagesProcessing = numMessagesProcessing;
 
     /**
      * Gets the current thread id
      */
-    (self as any).curThread = () => curThreadId;
+    (self as any).curThread = curThread;
 
-    (self as any).transfer = (message: any, items: any[]) => {
-        if (!Array.isArray(items)) {
-            if (!items) {
-                items = []
-            } else {
-                items = [items]
-            }
-        }
-        postMessage({__system: true, transfer: true, message, items}, {transfer: items})
-    };
+    (self as any).transfer = transfer;
 
     (self as any).sendError = sendError
     self.onmessage = async (e: MessageEvent) => {

@@ -112,6 +112,67 @@ Here is an example:
 
 > Note: The worker code did not change from the general usage example. Workers don't care if they're in a pool or not. This makes it trivial to switch between the two
 
+## Use with modules
+
+Using with modules is fairly straightforward as well. The only thing is that we need to tell the browser that we're using modules.
+We simply pass a `type: "module"` option when we create our thread (or thread pool) like so:
+
+```javascript
+const pool = ThreadPool.spawn('worker.js', {type: "module"})
+const thread = Thread.spawn('worker.js', {type: "module"})
+```
+
+## Use with Vite
+
+Vite allows us to build our worker files, either with or without TypeScript. Currently, only the module bundling is supported.
+To use it, add the following to your `vite.config.js`/`vite.config.ts` file:
+
+```javascript
+export default defineConfig({
+    // add this
+    worker: { format: 'es' }
+    
+    // ... your other options go here...
+})
+```
+
+Next, in the file where you will be spawning the worker, add an import statement to your worker path and add the query params `?worker&url`.
+This import statement should be a named default import as we will use the name to spawn our thread.
+For example, if our worker was in the path `./workers/myworker` we would have the following import statement:
+
+```javascript
+import workerPath from './workers/myworker?worker&url'
+import {Thread} from 'peaks-threads'
+
+async function myFunc() {
+    // create our thread
+    const thread = await Thread.spawn(workerPath, {type: 'module'})
+    
+    // other code here...
+}
+```
+
+## Registering handlers explicitly
+
+TypeScript doesn't like the whole "define a global method" for registering handlers as it doesn't match the built-in `self` type.
+To help with this, an alternative approache is provided via the `registerHandler` method. This method takes a event key (e.g. `init`, `work`, etc.)
+and a handler method, which it will then register that for you globally.
+
+Example:
+
+```typescript
+// worker.ts
+import {registerHandler} from "peaks-threads"
+
+// register onwork
+registerHandler('work', (x) => x * x)
+
+// register oninit
+registerHandler('init', (y) => console.log('Got y'))
+
+// ....
+```
+
 ## Sending classes
 
 Sometimes you want to share a class. Unfortunately, JavaScript doesn't let sending full classes or functions through message passing.
@@ -133,7 +194,7 @@ Once we have those methods, we call `registerDeHydration` to register it.
 Example for static methods class:
 
 ```typescript
-import {registerDeHydration} from "@matttolman/threads";
+import {registerDeHydration} from "peaks-threads";
 
 interface DehydratedPerson {
     name: string,
@@ -171,7 +232,7 @@ registerDeHydration({key: 'Person', type: Person})
 Example for independent functions class:
 
 ```typescript
-import {registerDeHydration} from "@matttolman/threads";
+import {registerDeHydration} from "peaks-threads";
 
 interface DehydratedPerson {
     name: string,
@@ -214,7 +275,7 @@ Regardless of which approach you take, the following code would be possible:
 
 ```typescript
 // main.ts
-import {Thread} from '@matttolman/threads'
+import {Thread} from 'peaks-threads'
 import {Person} from './person'
 
 async function sendPerson() {
@@ -227,7 +288,7 @@ And for the worker
 
 ```typescript
 // worker.ts
-import '@matttolman/threads'
+import 'peaks-threads'
 import {Person} from './person'
 
 oninit = (person: Person) => {
@@ -252,13 +313,11 @@ in the spawn options, and we define an `oninit` handler in our worker thread. Th
 The great thing is that this works for both standalone threads and pooled threads! The pool guarantees every thread is initialized with 
 it makes is given the same `initData` in the pool's options (though it only has a shallow copy, so be careful if you change it!).
 
-> Note: For simplicity, in the following examples I won't show imports, requires, or destructuring for the library. All of these examples
-> will assume importing and destructuring have been done.
-
 Here's an example:
 
 ```javascript
 // main.js
+import {Thread, ThreadPool} from 'peaks-threads'
 const mysecret = 'super-secret'
 
 async function spawn() {
@@ -277,15 +336,16 @@ In the worker now:
 
 ```javascript
 // worker.js
+import {registerHandler} from "peaks-threads";
 
 let secretWord = null
 
-oninit = ({secret}) => {
+registerHandler('init', ({secret}) => {
     console.log('Got my secret word!')
     secretWord = secret
-}
+})
 
-onwork = (guess) => guess === secretWord
+registerHandler('work', (guess) => guess === secretWord)
 ```
 
 ## Advanced Usage
@@ -300,7 +360,9 @@ But, what if we didn't want a response? What if we just wanted to notify the thr
 
 In those cases, we can send an "event" which will then call the thread's `onevent` handler. Here's an example:
 
-```html
+```javascript
+import {Thread} from 'peaks-threads'
+
 async function notify() {
     // Create a thread that will automatically close
     const thread = await Thread.spawn('worker.js', {closeWhenIdle: 100})
@@ -312,11 +374,13 @@ async function notify() {
 And for the worker thread:
 
 ```javascript
-onevent = (event) => {
+import {registerHandler} from 'peaks-threads'
+
+registerHandler('event', (event) => {
     // here we get the full Worker event object
     // so our action will actually be at event.data.action and not event.action
     console.log(event)
-}
+})
 ```
 
 One thing to note about the `onevent` handler is it always gets the full Worker message from the browser.
@@ -347,6 +411,7 @@ We'll show the recommended way to do this.
 
 ```javascript
 // main.js
+import {Thread} from 'peaks-threads'
 async function customThread() {
     // our handler will also get a raw worker message
     const handler = (v) => {
@@ -363,10 +428,11 @@ Worker thread:
 
 ```javascript
 // worker.js
-onevent = (event) => {
+import {registerHandler} from 'peaks-threads'
+registerHandler('event', (event) => {
     // this sends a response to our custom handler
     postMessage(42)
-}
+})
 ```
 
 ### Transfering objects to workers
@@ -377,6 +443,7 @@ To receive transferred objects, the underlying thread will register the `ontrans
 
 ```javascript
 // main.js
+import {Thread} from 'peaks-threads'
 async function transferExample() {
     const ab = new ArrayBuffer(64) // some "large" array buffer
     const ints = new Int32Array(ab) // our int view over it
@@ -393,12 +460,18 @@ And for the worker:
 
 ```javascript
 // worker.js
+import {registerHandler} from 'peaks-threads'
 
 // The transferred data (second param) is just instructions for the browser on how to manipulate memory
 // Onlyl the "message" (first param) is available for the handler
 ontransfer = (intView) => {
     console.log(intView.at(0))
 }
+
+// alternative
+registerHandler('transfer', (intView) => {
+    console.log(intView.at(0))
+})
 ```
 
 ### Transferring objects back
@@ -420,7 +493,6 @@ And for the worker:
 
 ```javascript
 // worker.js
-
 // The transferred data (second param) is just instructions for the browser on how to manipulate memory
 // Onlyl the "message" (first param) is available for the handler
 oninit = (intView) => {
@@ -430,6 +502,17 @@ oninit = (intView) => {
     // if a non-array item is passed as the second parameter, it will be wrapped in an array
     transfer(ints, ints.buffer)
 }
+
+// alternative
+import {registerHandler, transfer} from "peaks-threads";
+
+registerHandler('init', (intView) => {
+    let resolve
+    let ints = new Int32Array(new ArrayBuffer(64))
+    ints.set([99], 0)
+    // if a non-array item is passed as the second parameter, it will be wrapped in an array
+    transfer(ints, ints.buffer)
+})
 ```
 
 ### "Sharing" data
@@ -551,7 +634,7 @@ methods take the array index as the last parameter (zero-based offset). So, to g
 Example:
 
 ```javascript
-import {Address} from '@matttolman/threads'
+import {Address} from 'peaks-threads'
 
 const buff = new SharedArrayBuffer(32)
 const typedArr = new Int32Array(buff)
@@ -575,7 +658,7 @@ Example:
 
 ```typescript
 // main.ts
-import {Barrier, Thread} from '@matttolman/threads'
+import {Barrier, Thread} from 'peaks-threads'
 
 async function spawn() {
     // Make a barrier that requires three threads to hit it before continuing
@@ -590,7 +673,7 @@ async function spawn() {
 }
 
 // mutex.ts
-import {Mutex, Thread} from '@matttolman/threads'
+import {Mutex, Thread} from 'peaks-threads'
 
 let mux: Mutex
 
@@ -686,7 +769,7 @@ Example:
 
 ```typescript
 // main.ts
-import {Mutex, Thread} from '@matttolman/threads'
+import {Mutex, Thread} from 'peaks-threads'
 
 async function spawn() {
     const mux = Mutex.make()
@@ -698,7 +781,7 @@ async function spawn() {
 }
 
 // mutex.ts
-import {Mutex, Thread} from '@matttolman/threads'
+import {Mutex, Thread} from 'peaks-threads'
 
 let mux: Mutex
 
@@ -737,7 +820,7 @@ Example:
 
 ```typescript
 // main.ts
-import {Semaphore, Thread} from '@matttolman/threads'
+import {Semaphore, Thread} from 'peaks-threads'
 
 async function spawn() {
     // semaphore with 2 resources
@@ -752,7 +835,7 @@ async function spawn() {
 }
 
 // mutex.ts
-import {Semaphore, Thread} from '@matttolman/threads'
+import {Semaphore, Thread} from 'peaks-threads'
 
 let sem: Semaphore
 
@@ -788,7 +871,7 @@ Example:
 
 ```typescript
 // main.ts
-import {WaitGroup, ThreadPool} from '@matttolman/threads'
+import {WaitGroup, ThreadPool} from 'peaks-threads'
 
 async function spawn() {
     const wg = WaitGroup.make()
@@ -813,7 +896,7 @@ async function spawn() {
 }
 
 // pool.ts
-import {WaitGroup, Address} from '@matttolman/threads'
+import {WaitGroup, Address} from 'peaks-threads'
 
 let waitGroup: WaitGroup
 let addr: Address
