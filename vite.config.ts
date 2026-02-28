@@ -12,5 +12,5 @@ export default defineConfig({
             fileName: (format) => `threads.${format}.js`
         },
     },
-    plugins: [dts()]
+    plugins: [dts({ bundleTypes: true })]
 })
