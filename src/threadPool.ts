@@ -9,12 +9,44 @@
 import {Thread} from "./thread.ts";
 
 export interface ThreadPoolOptions {
+    /**
+     * Initial data for each thread. A deep copy is not made, so do not change this object once given!
+     */
     initData?: any,
-    schedulerStrategy?: ((threads: Thread[], canGrow: boolean) => Thread),
+    /**
+     * Override for the scheduler strategy. This determines how threads are chosen, when to grow the pool, or when to back off and retry
+     * The scheduler is given a list of live threads, and a flag indicating whether the pool can grow
+     */
+    schedulerStrategy?: ((threads: Thread[], canGrow: boolean) => Thread|'grow'|null),
+    /**
+     * Maximum number of threads in the pool. Defaults to navigator.hardwareConcurrency (if available) or 2 otherwise
+     */
     maxThreads?: number,
+    /**
+     * Minimum number of threads in the pool. Defaults to maxThreads
+     */
     minThreads?: number,
+    /**
+     * Number indicating when to close idle threads
+     */
     closeThreadWhenIdle?: number,
+    /**
+     * Number of times to retry queuing work with a thread
+     */
     queueRetries?: number
+    /**
+     * Type option to pass directly to the worker constructor. Often set to "module" when using esm modules
+     */
+    type?: 'classic'|'module',
+    /**
+     * Name option to pass directly to the worker constructor. Mostly useful for debugging purposes.
+     * NOTE: this does not impact the peaks-threads id assigned to each worker
+     */
+    name?: string,
+    /**
+     * Determines how credentials are sent when using `fetch()` which will be passed directly to the worker constructor
+     */
+    credentials?: 'omit'|'same-origin'|'include',
 }
 
 interface ThreadInfo {
