@@ -295,7 +295,7 @@ export interface ThreadOptions {
     /** Custom onErrorHandler for when an error is received from the thread */
     onErrorHandler?: ((err: any) => any),
     /**
-     * If set, then the thread will automatically close if it has not received a message after so many milliseconds
+     * If set, then the thread will automatically close if it has not received a message after so many milliseconds.
      *
      * **IMPORTANT!** If you are sharing memory and using condition variables/wait groups/mutexes/semaphores/barriers, then this could cause the thread to die
      * while it is holding shared resources!
@@ -410,7 +410,12 @@ export class Thread {
             return oldPostMessage(message, ...args)
         } as any).bind(this.worker)
 
-        this.worker.postMessage({__system: true, threadId: this.threadId, init: options?.initData || null, closeWhenIdle: options?.closeWhenIdle || Infinity})
+        this.worker.postMessage({
+            __system: true,
+            threadId: this.threadId,
+            init: options?.initData || null,
+            closeWhenIdle: options?.closeWhenIdle || Infinity
+        })
         this.handler = options?.onEventHandler
         this.errHandler = options?.onErrorHandler
         this.closeHandler = options?.closeHandler
@@ -430,12 +435,10 @@ export class Thread {
                         console.error(`Received error from thread ${this.threadId}!`, e.data.__error)
                         throw new Error(e.data.__error)
                     }
-                }
-                else if (e.data.hasOwnProperty('__close')) {
+                } else if (e.data.hasOwnProperty('__close')) {
                     doLogs && console.log(curThreadId, 'Thread ' + this.threadId + ' stopped running!', e)
                     this.closeThread()
-                }
-                else if (e.data.hasOwnProperty('workId') && (e.data.hasOwnProperty('res') || e.data.hasOwnProperty('rej'))) {
+                } else if (e.data.hasOwnProperty('workId') && (e.data.hasOwnProperty('res') || e.data.hasOwnProperty('rej'))) {
                     if (!this.workQueue.hasOwnProperty(e.data.workId)) {
                         console.error("UNKNOWN JOB " + e.data.workId + ' FROM THREAD ' + this.threadId)
                     } else {
@@ -453,19 +456,16 @@ export class Thread {
                         }
                         return
                     }
-                }
-                else if (e.data.hasOwnProperty('__initd')) {
+                } else if (e.data.hasOwnProperty('__initd')) {
                     if (e.data.__initd) {
                         res()
-                    }
-                    else {
+                    } else {
                         rej(e.data.__error || new Error('Initialization Failed!'))
                         this.worker.terminate()
                         this.killed = true
                     }
                     doLogs && console.log(curThreadId, 'Spawned thread ' + this.threadId)
-                }
-                else if (e.data.hasOwnProperty('__shared')) {
+                } else if (e.data.hasOwnProperty('__shared')) {
                     const {res, rej} = this.workQueue[e.data.__shared]
                     try {
                         if (e.data.hasOwnProperty(`__error`)) {
@@ -473,14 +473,12 @@ export class Thread {
                         } else {
                             res(null)
                         }
-                    }
-                    finally {
+                    } finally {
                         delete this.workQueue[e.data.__shared]
                         --this.pending
                     }
                     return
-                }
-                else if (e.data.hasOwnProperty('__transferd')) {
+                } else if (e.data.hasOwnProperty('__transferd')) {
                     const {res, rej} = this.workQueue[e.data.__transferd]
                     try {
                         if (e.data.hasOwnProperty(`__error`)) {
@@ -493,25 +491,20 @@ export class Thread {
                         --this.pending
                     }
                     return
-                }
-                else if (e.data.hasOwnProperty('transfer')) {
+                } else if (e.data.hasOwnProperty('transfer')) {
                     if (this.transferHandler) {
                         this.transferHandler(e.data.message)
-                    }
-                    else if (this.handler) {
+                    } else if (this.handler) {
                         this.handler(e)
                     }
                     return
-                }
-                else {
+                } else {
                     throw new Error('INVALID SYSTEM EVENT!')
                 }
-            }
-            else if (this.handler) {
+            } else if (this.handler) {
                 doLogs && console.log(curThreadId, 'Custom message from ' + this.threadId + ' dispatched to handler')
                 this.handler(e)
-            }
-            else {
+            } else {
                 doLogs && console.log(curThreadId, 'Unknown message from ' + this.threadId + ' and no handler registered!')
             }
         }
@@ -581,11 +574,16 @@ export class Thread {
      * (usually necessary when a pool can scale up as spawning threads is asynchronous, so pool scaling must be asynchronous
      *  which means that thread claiming must be asynchronous as well)
      */
-    public poolClaim() { ++this.pending }
+    public poolClaim() {
+        ++this.pending
+    }
+
     /**
      * Helper method for thread pools to release a temporary claim on a thread
      */
-    public poolRelease() { --this.pending }
+    public poolRelease() {
+        --this.pending
+    }
 
     /**
      * Set the handler for when a thread is closed/killed
@@ -742,43 +740,63 @@ if (typeof self !== 'undefined') {
     }.bind(self) as any)
 
     let closing = false
+    let closed = false
     const oldClose = self.close
     self.close = (function () {
-        if (!closing) {
-            // notify asap that we're shutting down so the parent thread doesn't use us
-            postMessage({__system: true, __close: true})
+        // make calls to close idempotent
+        if (closing) {
+            return
         }
-        closing = true
+
         doLogs && console.log(curThreadId, 'Closing thread')
+        closing = true
+        // notify asap that we're shutting down so the parent thread doesn't use us
+        // we'll stop allowing messages after a milliseconds
+        postMessage({__system: true, __close: true})
 
-        const cleanup = () => {
-            console.log(curThreadId, 'Closed thread')
-            oldClose()
-        }
+        // microtick 1
+        new Promise((res) => {
+            setTimeout(res, 5)
+        })
+            .then(async () => {
+                // Shut down all incoming messages - we won't be allowing anything else to come through
+                closed = false
+                doLogs && console.log(curThreadId, 'Attempting graceful shutdown...')
+                // exclude this message from "processing" temporarily to make the waiting protocol easier to write
+                // We don't want to confuse devs who are waiting for all messages to finish processing
 
-        if ((self as any).onclose) {
-            doLogs && console.log(curThreadId, 'Calling onclose');
-            const r = (self as any).onclose()
+                // Wait up to 1 second for in-flight messages to close gracefully
+                let attempt = 0
+                const maxAttempts = 10
+                doLogs && console.log(curThreadId, 'Outstanding events: ', messagesProcessing)
+                while (messagesProcessing > 0 && attempt++ < maxAttempts) {
+                    doLogs && console.log(curThreadId, `Detected messages in-flight, pausing for 100ms while waiting for messages to complete. Attempt ${attempt}/${maxAttempts}`)
+                    await new Promise(res => {
+                        setTimeout(() => res(null), 100)
+                    })
+                }
 
-            if (promiseLike(r)) {
-                if ('finally' in r && typeof r.finally === 'function') {
-                    r.finally(cleanup)
+                if (messagesProcessing > 0) {
+                    console.error(curThreadId, `Failed to wait for in-flight messages to finish! Potential deadlock! Force killing thread!`)
                 }
-                else if ('catch' in r && typeof r.catch === 'function') {
-                    r
-                        .then(cleanup)
-                        .catch((err: any) => {
-                            console.error(curThreadId, "onclose had error, attempting to finish cleanup", err)
-                            cleanup()
-                        })
+
+                if ((self as any).onclose) {
+                    doLogs && console.log(curThreadId, 'Calling onclose');
+                    try {
+                        const r = (self as any).onclose()
+
+                        if (promiseLike(r)) {
+                            await r
+                        }
+                    } catch (e) {
+                        console.error(curThreadId, 'ERROR IN CUSTOM onclose! IGNORING AND CLOSING', e)
+                    }
                 }
-                else {
-                    r.then(cleanup)
-                }
-                return
-            }
-        }
-        cleanup()
+            })
+            .finally(() => {
+                console.log(curThreadId, 'Closed thread')
+                oldClose()
+            })
     })
 
     let threadIdleTimeout: any = null
@@ -812,7 +830,7 @@ if (typeof self !== 'undefined') {
 
     (self as any).sendError = sendError
     self.onmessage = async (e: MessageEvent) => {
-        if (closing) {
+        if (closed) {
             console.error(curThreadId, 'Thread is shutting down but receiving messages!')
             sendError(new Error(`Thread is shutting down!`))
         }
@@ -866,8 +884,7 @@ if (typeof self !== 'undefined') {
                                 await res
                             }
                             postMessage({__system: true, __transferd: e.data.transfer})
-                        }
-                        else if ('workId' in e.data && 'work' in e.data) {
+                        } else if ('workId' in e.data && 'work' in e.data) {
                             if ((self as any).onwork) {
                                 res = (self as any).onwork(e.data.work)
                             } else if ((self as any).onevent) {
@@ -887,8 +904,7 @@ if (typeof self !== 'undefined') {
                             setThreadId(e.data.threadId)
                             if ((self as any).oninit) {
                                 (self as any).oninit(e.data.init)
-                            }
-                            else {
+                            } else {
                                 doLogs && console.log(curThreadId, "oninit not found, skipping custom initialization");
                             }
 
@@ -903,40 +919,8 @@ if (typeof self !== 'undefined') {
                             postMessage({__system: true, __initd: true})
                             doLogs && console.log(curThreadId, 'Thread ready!')
                         } else if ('__close' in e.data) {
-                            if (!closing) {
-                                // notify asap that we're shutting down so the parent thread doesn't use us
-                                closing = true
-                                postMessage({__system: true, __close: true})
-                            }
-                            try {
-                                doLogs && console.log(curThreadId, 'Attempting graceful shutdown...')
-                                // exclude this message from "processing" temporarily to make the waiting protocol easier to write
-                                // We don't want to confuse devs who are waiting for all messages to finish processing
-                                --messagesProcessing
-
-                                // Wait up to 1 second for in-flight messages to close gracefully
-                                let attempt = 0
-                                const maxAttempts = 10
-                                doLogs && console.log(curThreadId, 'Outstanding events: ', messagesProcessing)
-                                while (messagesProcessing && attempt++ < maxAttempts) {
-                                    doLogs && console.log(curThreadId, `Detected messages in-flight, pausing for 100ms while waiting for messages to complete. Attempt ${attempt}/${maxAttempts}`)
-                                    await new Promise(res => {
-                                        setTimeout(() => res(null), 100)
-                                    })
-                                }
-
-                                if (messagesProcessing) {
-                                    console.error(curThreadId, `Failed to wait for in-flight messages to finish! Potential deadlock! Force killing thread!`)
-                                }
-
-                                // Do the actual close (this will call the `onclose` handler and give a final chance to clean things up properly)
-                                self.close()
-                            }
-                            finally {
-                                ++messagesProcessing
-                            }
-                        }
-                        else {
+                            self.close()
+                        } else {
                             throw new Error('INVALID SYSTEM EVENT!')
                         }
                     } else if ((self as any).onevent) {
@@ -977,8 +961,7 @@ if (typeof self !== 'undefined') {
                     sendError(err)
                 }
             }
-        }
-        finally {
+        } finally {
             --messagesProcessing
             if (messagesProcessing === 0 && threadIdle > 0 && isFinite(threadIdle)) {
                 threadIdleTimeout = setTimeout(() => self.close(), threadIdle)

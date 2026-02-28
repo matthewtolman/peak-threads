@@ -91,6 +91,7 @@ describe('Thread', () => {
         expect(await thread.sendWork(4)).to.equal(16)
         thread.sendEvent(-23)
         expect(await p).to.equal(99)
+        thread.close()
     })
 
     it('transfer handler transfers ownership', async () => {
@@ -112,6 +113,7 @@ describe('Thread', () => {
         expect(await p).to.equal(99)
 
         expect(() => ints.at(0)).to.throw()
+        thread.kill()
     })
 
     it('can transfer back', async () => {
@@ -132,6 +134,7 @@ describe('Thread', () => {
         await thread.transfer(ints, ints.buffer)
         expect(await p).to.equal(99)
         expect(ints.at(0)).to.equal(99)
+        thread.close()
     })
 })
 
@@ -241,9 +244,11 @@ describe('ThreadPool', () => {
         expect(pool.size()).to.equal(0)
 
         {
-            const [j1, j2, j3] = await Promise.all([
+            const answers = await Promise.all([
                 pool.sendWork(4), pool.sendWork(2), pool.sendWork(3)
             ])
+            console.error(answers)
+            const [j1, j2, j3] = answers
             expect(j1).to.equal(16)
             expect(j2).to.equal(4)
             expect(j3).to.equal(9)
@@ -310,6 +315,7 @@ describe('ConditionVariable', async () => {
         }
 
         expect(mem.at(0)).to.equal(12)
+        thread.close()
     })
 })
 
@@ -334,6 +340,7 @@ describe('WaitGroup', async () => {
         await wg.waitAsync()
 
         expect(mem.at(0)).to.equal(4 + 5 + 6 + 7)
+        thread.kill()
     })
 })
 
@@ -350,6 +357,7 @@ describe('Barrier', async () => {
         await bar.waitAsync()
 
         expect(mem.at(0)).to.equal(2)
+        thread.close()
     })
 })
 
@@ -360,10 +368,10 @@ describe('Semaphore', async () => {
         for (let i = 0; i < 2; ++i) {
             const sem = Semaphore.make(1)
             const mem = new Int32Array(new SharedArrayBuffer(64))
-            const thread1 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
-            const thread2 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
-            const thread3 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
-            const thread4 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
+            const thread1 = await Thread.spawn('semaphore.js', {initData: {sem, mem}, closeWhenIdle: 200})
+            const thread2 = await Thread.spawn('semaphore.js', {initData: {sem, mem}, closeWhenIdle: 200})
+            const thread3 = await Thread.spawn('semaphore.js', {initData: {sem, mem}, closeWhenIdle: 200})
+            const thread4 = await Thread.spawn('semaphore.js', {initData: {sem, mem}, closeWhenIdle: 200})
 
             await Promise.all([
                 thread1.sendWork(1),
@@ -388,8 +396,8 @@ describe('Mutex', async () => {
         const mem = new Int32Array(new SharedArrayBuffer(64))
 
         await mux.lockAsync()
-        const thread1 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
-        const thread2 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
+        const thread1 = await Thread.spawn('mutex.js', {initData: {mux, mem}, closeWhenIdle: 200})
+        const thread2 = await Thread.spawn('mutex.js', {initData: {mux, mem}, closeWhenIdle: 200})
 
         const p1 = thread1.sendWork(w)
         const p2 = thread2.sendWork(w)
@@ -406,9 +414,9 @@ describe('Mutex', async () => {
         const w = 300
         const mux = Mutex.make()
         const mem = new Int32Array(new SharedArrayBuffer(64))
-        const thread1 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
-        const thread2 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
-        const thread3 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
+        const thread1 = await Thread.spawn('mutex.js', {initData: {mux, mem}, closeWhenIdle: 200})
+        const thread2 = await Thread.spawn('mutex.js', {initData: {mux, mem}, closeWhenIdle: 200})
+        const thread3 = await Thread.spawn('mutex.js', {initData: {mux, mem}, closeWhenIdle: 200})
 
         await mux.lockAsync()
 
