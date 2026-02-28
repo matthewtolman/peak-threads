@@ -47,6 +47,7 @@ export class ThreadPool {
     private lastLive: number
     private options: ThreadPoolOptions
     private script: string
+    private closed: boolean = false
     private schedulerStrategy: (threads: Thread[], canGrow: boolean) => Thread|'grow'|null
 
     private constructor(res: any, rej: any, script: string, options?: ThreadPoolOptions) {
@@ -104,6 +105,11 @@ export class ThreadPool {
                 }
                 // respawn the required threads if they ever fail
                 const close = async () => {
+                    this.threads[threadObj.indx].live = false
+                    if (this.closed) {
+                        this.threads[threadObj.indx].thread = null as any
+                        return
+                    }
                     this.threads[threadObj.indx].live = false
                     this.threads[threadObj.indx].initPromise = Thread.spawn(script, {initData, closeHandler: close})
                     this.threads[threadObj.indx].thread = await this.threads[i].initPromise!!
@@ -212,12 +218,40 @@ export class ThreadPool {
      * @param work Work to send
      */
     public async sendWork(work: any) {
+        if (this.closed) {
+            throw new Error('Cannot send work, pool is closed!')
+        }
         const thread = (await this.selectThread())
+        if (this.closed) {
+            throw new Error('Cannot send work, pool is closed!')
+        }
         try {
             return await thread.sendWork(work)
         }
         finally {
             thread.poolRelease()
+        }
+    }
+
+    /**
+     * Attempt a graceful shutdown of the thread pool where it will try to wait for any remaining work (though it if times out it will force a shutdown)
+     */
+    public close() {
+        this.closed = true
+        for (const t of this.threads.slice(0, this.lastLive)) {
+            t.thread.close()
+        }
+    }
+
+    /**
+     * Force a shutdown of the thread pool and all of its threads
+     */
+    public kill() {
+        this.closed = true
+        for (const t of this.threads.slice(0, this.lastLive)) {
+            if (t.live && t.thread) {
+                t.thread.kill()
+            }
         }
     }
 
@@ -232,6 +266,10 @@ export class ThreadPool {
         this.threads[i] = threadObj
         // respawn the required threads if they ever fail
         const close = () => {
+            if (this.closed) {
+                this.threads[threadObj.indx].live = false
+                this.threads[threadObj.indx].thread = null as any
+            }
             this.threads[threadObj.indx] = this.threads[this.lastLive]
             this.threads[threadObj.indx].indx = threadObj.indx
             this.threads[this.lastLive] = null as any

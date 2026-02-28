@@ -50,7 +50,37 @@ setting up error handling, initializing (optional) tracing, and building a stand
 
 With this, we now have a way to easily do work in the background without blocking the main thread.
 
-## Pool Usage
+## Closing Threads
+
+By default, threads don't close automatically. This can cause resource consumption issues if your program repeatedly spawns new threads that never end.
+There are several ways to close threads:
+* Provide an idle timeout which will automatically close threads after they have been idle (not received/processed a message) for that many milliseconds. Done via the `closeWhenIdle` option to `Thread.spawn`.
+* Call `Thread.close()` once you are done with a thread to attempt a graceful shutdown
+* Call `Thread.kill()` once you are done to force a shutdown
+* Call `close()`/`self.close()` from inside the thread once it is done
+* Use a global thread pool to manage threads automatically
+
+```html
+<!-- index.html -->
+<button id="btn">Click Me!</button>
+<div id="result"></div>
+
+<script src="/public/threads.iife.js"></script>
+<script>
+    const {Thread} = threads
+
+    async function doWork() {
+        const thread = await Thread.spawn('worker.js', {closeWhenIdle: 100}) // auto close
+        document.getElementById('btn').disabled = true
+        const res = await thread.sendWork({action: 'square', value: 42})
+        document.getElementById('result').innerText = res
+        document.getElementById('btn').disabled = false
+    }
+</script>
+```
+
+
+## Thread Pool Usage
 
 At times, we may want a maximum limit on how many threads we can have. We also may want to scale down the number of threads automatically if they're idle.
 To achieve this, simply use a `ThreadPool` which handles orchestrating threads, scaling up, and scaling down automatically.

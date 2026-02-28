@@ -297,8 +297,7 @@ export interface ThreadOptions {
     /**
      * If set, then the thread will automatically close if it has not received a message after so many milliseconds
      *
-     * **IMPORTANT!** This only works for threads that receive communication _exclusively_ through message passing!
-     * If you are sharing memory and using condition variables/wait groups, then this could cause the thread to die
+     * **IMPORTANT!** If you are sharing memory and using condition variables/wait groups/mutexes/semaphores/barriers, then this could cause the thread to die
      * while it is holding shared resources!
      */
     closeWhenIdle?: number,
@@ -366,7 +365,7 @@ export interface ThreadOptions {
  *  * If a promise is returned, it will be awaited. Return value **will** be sent back to the parent thread
  * * `onevent` - Called when either a custom event is sent to the worker thread, or when one of the above handlers is missing and an event comes in that would have gone to one of the above (uses `onevent` as a catch-all)
  *
- * See Also
+ * See also {@link registerHandler}
  *
  * ### Additional Global Methods Provided for a Thread's Script
  *

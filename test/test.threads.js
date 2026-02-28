@@ -144,6 +144,7 @@ describe('ThreadPool', () => {
         expect(await pool.sendWork(3)).to.equal(9)
         expect(await pool.sendWork(5)).to.equal(25)
         expect(await pool.sendWork(6)).to.equal(36)
+        pool.close()
     })
 
     it('can create dynamic thread pool', async () => {
@@ -186,6 +187,7 @@ describe('ThreadPool', () => {
             const results = await Promise.all(resPromises)
             expect(pool.size()).to.be.greaterThan(3)
         }
+        pool.kill()
     })
 
     it('can create dynamic thread pool that dooes not shrink', async () => {
@@ -227,6 +229,7 @@ describe('ThreadPool', () => {
             const results = await Promise.all(resPromises)
             expect(pool.size()).to.be.greaterThan(3)
         }
+        pool.close()
     })
 })
 
