@@ -45,4 +45,7 @@ onwork = ({action, value}) => {
 }
 ```
 
-This whole process handles creating threads
+This whole process handles creating threads, initializing them with a unique id (and other initial data), creating an object dehydration/hydration framework,
+setting up error handling, initializing (optional) tracing, and building a standard messaging protocol.
+
+With this, we now have a way to easily do work in the background.

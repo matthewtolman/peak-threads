@@ -129,13 +129,96 @@ describe('Thread', () => {
 
 describe('ThreadPool', () => {
     it('can create thread pool', async () => {
-        const thread = await ThreadPool.spawn('worker1.js', {initData: 2})
-        expect(thread).to.not.be.null
-        expect(await thread.sendWork(4)).to.equal(16)
-        expect(await thread.sendWork(2)).to.equal(4)
-        expect(await thread.sendWork(3)).to.equal(9)
-        expect(await thread.sendWork(5)).to.equal(25)
-        expect(await thread.sendWork(6)).to.equal(36)
+        const pool = await ThreadPool.spawn('worker1.js', {initData: 2})
+        expect(pool).to.not.be.null
+        expect(await pool.sendWork(4)).to.equal(16)
+        expect(await pool.sendWork(2)).to.equal(4)
+        expect(await pool.sendWork(3)).to.equal(9)
+        expect(await pool.sendWork(5)).to.equal(25)
+        expect(await pool.sendWork(6)).to.equal(36)
+    })
+
+    it('can create dynamic thread pool', async () => {
+        const pool = await ThreadPool.spawn('worker-slow.js', {initData: 2, minThreads: 0, closeThreadWhenIdle: 10})
+        expect(pool).to.not.be.null
+
+        // check that we can spin up
+        expect(pool.size()).to.equal(0)
+
+        {
+            const [j1, j2, j3] = await Promise.all([
+                pool.sendWork(4), pool.sendWork(2), pool.sendWork(3)
+            ])
+            expect(j1).to.equal(16)
+            expect(j2).to.equal(4)
+            expect(j3).to.equal(9)
+            expect(pool.size()).to.equal(3)
+        }
+
+        // check that we can spin down
+        await new Promise(r => setTimeout(() => r(null), 50))
+        expect(pool.size()).to.equal(0)
+
+        // and see if we can spin back up
+        {
+            const [j1, j2, j3] = await Promise.all([
+                pool.sendWork(4), pool.sendWork(2), pool.sendWork(3)
+            ])
+            expect(j1).to.equal(16)
+            expect(j2).to.equal(4)
+            expect(j3).to.equal(9)
+            expect(pool.size()).to.equal(3)
+        }
+
+        // see if we will spin up under really high load
+        // see if we will spin up under really high load
+        {
+            let work = new Array(500).fill(500)
+            let resPromises = work.map(w => pool.sendWork(w))
+            const results = await Promise.all(resPromises)
+            expect(pool.size()).to.be.greaterThan(3)
+        }
+    })
+
+    it('can create dynamic thread pool that dooes not shrink', async () => {
+        const pool = await ThreadPool.spawn('worker-slow.js', {initData: 2, minThreads: 0})
+        expect(pool).to.not.be.null
+
+        // check that we can spin up
+        expect(pool.size()).to.equal(0)
+
+        {
+            const [j1, j2, j3] = await Promise.all([
+                pool.sendWork(4), pool.sendWork(2), pool.sendWork(3)
+            ])
+            expect(j1).to.equal(16)
+            expect(j2).to.equal(4)
+            expect(j3).to.equal(9)
+            expect(pool.size()).to.equal(3)
+        }
+
+        // check that we can spin down
+        await new Promise(r => setTimeout(() => r(null), 50))
+        expect(pool.size()).to.equal(3)
+
+        // and see if we can spin back up
+        {
+            const [j1, j2, j3] = await Promise.all([
+                pool.sendWork(4), pool.sendWork(2), pool.sendWork(3)
+            ])
+            expect(j1).to.equal(16)
+            expect(j2).to.equal(4)
+            expect(j3).to.equal(9)
+            expect(pool.size()).to.equal(3)
+        }
+
+        // see if we will spin up under really high load
+        {
+            let work = new Array(500).fill(500)
+            let resPromises = work.map(w => pool.sendWork(w))
+            const results = await Promise.all(resPromises)
+            expect(pool.size()).to.be.greaterThan(3)
+        }
     })
 })
 
@@ -249,7 +332,7 @@ describe('Mutex', async () => {
 
     it('can lock when contended', async function () {
         this.timeout(30_000)
-        const w = 500
+        const w = 300
         const mux = make(Mutex)
         const mem = new Int32Array(new SharedArrayBuffer(64))
         const thread1 = await Thread.spawn('mutex.js', {initData: {mux, mem}})

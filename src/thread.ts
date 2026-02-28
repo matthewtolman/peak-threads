@@ -334,6 +334,7 @@ export class Thread {
         }
     } = {}
     private killed: boolean = false
+    private pending: number = 0;
 
     private constructor(res: any, rej: any, script: string, options?: ThreadOptions) {
         this.threadId = curThreadId + '->' + (++incThreadId)
@@ -353,6 +354,7 @@ export class Thread {
         this.worker.postMessage({__system: true, threadId: this.threadId, init: options?.initData || null, closeWhenIdle: options?.closeWhenIdle || Infinity})
         this.handler = options?.onEventHandler
         this.errHandler = options?.onErrorHandler
+        this.closeHandler = options?.closeHandler
 
         this.worker.onmessage = (e) => {
             doLogs && console.log(curThreadId, 'Received message from ' + this.threadId, e)
@@ -387,6 +389,7 @@ export class Thread {
                             }
                         } finally {
                             delete this.workQueue[e.data.workId]
+                            --this.pending
                         }
                         return
                     }
@@ -404,24 +407,31 @@ export class Thread {
                 }
                 else if (e.data.hasOwnProperty('__shared')) {
                     const {res, rej} = this.workQueue[e.data.__shared]
-                    if (e.data.hasOwnProperty(`__error`)) {
-                        rej(e.data.__error)
+                    try {
+                        if (e.data.hasOwnProperty(`__error`)) {
+                            rej(e.data.__error)
+                        } else {
+                            res(null)
+                        }
                     }
-                    else {
-                        res(null)
+                    finally {
+                        delete this.workQueue[e.data.__shared]
+                        --this.pending
                     }
-                    delete this.workQueue[e.data.__shared]
                     return
                 }
                 else if (e.data.hasOwnProperty('__transferd')) {
                     const {res, rej} = this.workQueue[e.data.__transferd]
-                    if (e.data.hasOwnProperty(`__error`)) {
-                        rej(e.data.__error)
+                    try {
+                        if (e.data.hasOwnProperty(`__error`)) {
+                            rej(e.data.__error)
+                        } else {
+                            res(null)
+                        }
+                    } finally {
+                        delete this.workQueue[e.data.__transferd]
+                        --this.pending
                     }
-                    else {
-                        res(null)
-                    }
-                    delete this.workQueue[e.data.__transferd]
                     return
                 }
                 else {
@@ -483,6 +493,25 @@ export class Thread {
     }
 
     /**
+     * Helper method for thread pools to claim a thread temporarily while waiting for a micro-tick to happen
+     * (usually necessary when a pool can scale up as spawning threads is asynchronous, so pool scaling must be asynchronous
+     *  which means that thread claiming must be asynchronous as well)
+     */
+    public poolClaim() { ++this.pending }
+    /**
+     * Helper method for thread pools to release a temporary claim on a thread
+     */
+    public poolRelease() { --this.pending }
+
+    /**
+     * Set the handler for when a thread is closed/killed
+     * @param h Handler for when a thread is closed/killed
+     */
+    public setOnClose(h: ((t: Thread) => any) | undefined) {
+        this.closeHandler = h
+    }
+
+    /**
      * Sends some piece of work off to a thread and returns a promise waiting for a response
      * @param work The work to send to the thread (passed to your `onwork` handler)
      * @return Promise with the result object from doing the work
@@ -493,10 +522,11 @@ export class Thread {
         }
         const workId = this.nextWorkId()
         doLogs && console.log(curThreadId, `Sending work ${workId} to thread ${this.threadId}`, work)
+        ++this.pending
         const promise = new Promise((res, rej) => {
             this.workQueue[workId] = {res, rej}
+            this.worker.postMessage({__system: true, workId, work})
         })
-        this.worker.postMessage({__system: true, workId, work})
         return promise as Promise<R>
     }
 
@@ -505,7 +535,7 @@ export class Thread {
      * This helps indicate how busy a thread is
      */
     public numPendingRequests(): number {
-        return Object.keys(this.workQueue).length
+        return this.pending
     }
 
     /**
@@ -543,6 +573,7 @@ export class Thread {
             throw new Error("Invalid Operation! Thread is stopped!")
         }
         const shareId = this.nextWorkId()
+        ++this.pending
         const promise = new Promise((res, rej) => {
             doLogs && console.log(curThreadId, 'queued share', shareId)
             this.workQueue[shareId] = {res, rej}
@@ -573,6 +604,7 @@ export class Thread {
             }
         }
         const transferId = this.nextWorkId()
+        ++this.pending
         const promise = new Promise((res, rej) => {
             doLogs && console.log(curThreadId, 'queued transfer', transferId)
             this.workQueue[transferId] = {res, rej}
@@ -634,7 +666,6 @@ if (typeof self !== 'undefined') {
     let messagesProcessing: number = 0
 
     function sendError(err: any) {
-        console.error(curThreadId, err)
         postMessage({__system: true, __error: err})
     }
 
