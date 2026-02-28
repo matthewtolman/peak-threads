@@ -9,11 +9,11 @@
 /**
  * Registers a global handler. Can only be called from a {@link Thread} that is spawned (not from the main thread).
  *
- * @param handler Handler function to register
  * @param type Type of handler to register (event = onevent, init = oninit, share = onshare, etc.)
+ * @param handler Handler function to register
  * @constructor
  */
-export function registerHandler(handler: (_?: any, _1?: any) => any, type: 'init'|'event'|'share'|'transfer'|'work'|'close' = 'event') {
+export function registerHandler(type: 'init'|'event'|'share'|'transfer'|'work'|'close', handler: (_?: any, _1?: any) => any) {
     if (self) {
         switch (type) {
             case 'init':

@@ -10,7 +10,8 @@
   "exports": {
     ".": {
       "import": "./dist/threads.es.js",
-      "require": "./dist/threads.umd.js"
+      "require": "./dist/threads.umd.js",
+      "types": "./dist/threads.d.ts"
     }
   },
   "scripts": {
