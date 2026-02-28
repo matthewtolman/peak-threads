@@ -1,3 +1,11 @@
+/*
+    Copyright Matthew Tolman, 2026
+
+    This Source Code Form is subject to the terms of the Mozilla Public
+    License, v. 2.0. If a copy of the MPL was not distributed with this
+    file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 import type {ElementLayout} from "./types.ts";
 import {Address, type DehydratedAddress, make} from "./memory.ts";
 
@@ -25,13 +33,9 @@ export class Semaphore {
      * @param value Count of resources
      * @param initMem Should be true unless hydrating
      */
-    constructor(address: Address<Int32Array>, value: number, initMem: boolean = true) {
+    constructor(address: Address<Int32Array>, value: number) {
         this.addr = address
         this.value = value
-
-        if (initMem) {
-            this.addr.set(value)
-        }
     }
 
     /**
@@ -48,7 +52,7 @@ export class Semaphore {
      * @param value Value of the semaphore
      */
     static hydrate({addr, value}: DehydratedSemaphore) {
-        return new Semaphore(Address.hydrate(addr), value, false)
+        return new Semaphore(Address.hydrate(addr), value)
     }
 
     /**
@@ -87,12 +91,12 @@ export class Semaphore {
             const val = this.addr.atomicLoad()
 
             // attempt to acquire a lock
-            if (val > 0 && this.addr.atomicCmpExch(val, val-1) === val) {
+            if (val < this.value && this.addr.atomicCmpExch(val, val+1) === val) {
                 return true;
             }
 
             // wait for it to be available
-            if (this.addr.atomicWait(0, timeout) === 'timed-out') {
+            if (this.addr.atomicWait(this.value, timeout) === 'timed-out') {
                 return false
             }
             if (Number.isFinite(timeout)) {
@@ -122,12 +126,12 @@ export class Semaphore {
             const val = this.addr.atomicLoad()
 
             // attempt to acquire a lock
-            if (val > 0 && this.addr.atomicCmpExch(val, val - 1) === val) {
+            if (val < this.value && this.addr.atomicCmpExch(val, val + 1) === val) {
                 return true;
             }
 
             // wait for it to be available
-            if (await this.addr.atomicWaitAsync(0, timeout) === 'timed-out') {
+            if (await this.addr.atomicWaitAsync(this.value, timeout) === 'timed-out') {
                 return false
             }
 
@@ -147,7 +151,7 @@ export class Semaphore {
      * Releases a resource
      */
     public release() {
-        this.addr.atomicAdd(1)
+        this.addr.atomicSub(1)
         this.addr.atomicNotifyOne()
     }
 }

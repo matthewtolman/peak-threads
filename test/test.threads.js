@@ -1,3 +1,11 @@
+/*
+    Copyright Matthew Tolman, 2026
+
+    This Source Code Form is subject to the terms of the Mozilla Public
+    License, v. 2.0. If a copy of the MPL was not distributed with this
+    file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 const {Barrier, ThreadPool, Thread, Mutex, make, ConditionVariable, WaitGroup, Semaphore} = threads
 
 describe('Thread', () => {
@@ -112,13 +120,13 @@ describe('Thread', () => {
         const p = new Promise((res) => {
             resolve = res
         })
-        const handler = (e) => {
-            const {result, buff} = e.data
+        const handler = ({result, buff}) => {
             ints = buff
+            console.error('HANDLER')
             resolve(result)
         }
         ints.set([99], 0)
-        const thread = await Thread.spawn('worker3.js', {initData:45, onEventHandler:handler})
+        const thread = await Thread.spawn('worker3.js', {initData:45, onTransferHandler: handler})
         expect(thread).to.not.be.null
 
         await thread.transfer(ints, ints.buffer)
@@ -224,8 +232,8 @@ describe('ThreadPool', () => {
 
 describe('ConditionVariable', async () => {
     it('can notify', async function () {
-        const mux = make(Mutex)
-        const cv = make(ConditionVariable)
+        const mux = Mutex.make()
+        const cv = ConditionVariable.make()
         const mem = new Int32Array(new SharedArrayBuffer(64))
 
         await mux.lockAsync()
@@ -244,7 +252,7 @@ describe('ConditionVariable', async () => {
 
 describe('WaitGroup', async () => {
     it('can lock wait until tasks are done', async function () {
-        const wg = make(WaitGroup)
+        const wg = WaitGroup.make()
         const mem = new Int32Array(new SharedArrayBuffer(64))
         const thread = await Thread.spawn('wait_group.js', {initData: {wg, mem}})
 
@@ -268,7 +276,7 @@ describe('WaitGroup', async () => {
 
 describe('Barrier', async () => {
     it('blocks until all threads hit the barrier', async function () {
-        const bar = make(Barrier, 3)
+        const bar = Barrier.make(3)
         const mem = new Int32Array(new SharedArrayBuffer(64))
         const thread1 = await Thread.spawn('barrier.js', {initData: {bar, mem}})
         const thread2 = await Thread.spawn('barrier.js', {initData: {bar, mem}})
@@ -287,7 +295,7 @@ describe('Semaphore', async () => {
         this.timeout(30_000)
 
         for (let i = 0; i < 2; ++i) {
-            const sem = make(Semaphore, 1)
+            const sem = Semaphore.make(1)
             const mem = new Int32Array(new SharedArrayBuffer(64))
             const thread1 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
             const thread2 = await Thread.spawn('semaphore.js', {initData: {sem, mem}})
@@ -313,7 +321,7 @@ describe('Mutex', async () => {
     it('can do basic locking', async function () {
         this.timeout(30_000)
         const w = 5
-        const mux = make(Mutex)
+        const mux = Mutex.make()
         const mem = new Int32Array(new SharedArrayBuffer(64))
 
         await mux.lockAsync()
@@ -333,7 +341,7 @@ describe('Mutex', async () => {
     it('can lock when contended', async function () {
         this.timeout(30_000)
         const w = 300
-        const mux = make(Mutex)
+        const mux = Mutex.make()
         const mem = new Int32Array(new SharedArrayBuffer(64))
         const thread1 = await Thread.spawn('mutex.js', {initData: {mux, mem}})
         const thread2 = await Thread.spawn('mutex.js', {initData: {mux, mem}})

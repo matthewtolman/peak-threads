@@ -20,28 +20,6 @@
     var expect = chai.expect
 </script>
 <script src="test.threads.js"></script>
-<script type="module">
-    /*
-
-    test('semaphore', async () => {
-        const sem = make(Semaphore, 1)
-        const mem = new Int32Array(new SharedArrayBuffer(64))
-        const thread1 = new Thread('semaphore.js', {sem, mem})
-        const thread2 = new Thread('semaphore.js', {sem, mem})
-        const thread3 = new Thread('semaphore.js', {sem, mem})
-        const thread4 = new Thread('semaphore.js', {sem, mem})
-
-        await Promise.all([
-            thread1.sendWork(1),
-            thread2.sendWork(1),
-            thread3.sendWork(1),
-            thread4.sendWork(1),
-        ])
-
-        assert(mem.at(0) === 800)
-    })
-    */
-</script>
 <script class="mocha-exec">
     mocha.run();
 </script>

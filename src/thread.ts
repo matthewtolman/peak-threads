@@ -1,3 +1,11 @@
+/*
+    Copyright Matthew Tolman, 2026
+
+    This Source Code Form is subject to the terms of the Mozilla Public
+    License, v. 2.0. If a copy of the MPL was not distributed with this
+    file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 import {Mutex} from "./mutex.ts";
 import {ConditionVariable} from "./conditionVariable.ts";
 import {Address} from "./memory.ts";
@@ -262,6 +270,8 @@ export interface ThreadOptions {
     initData?: any,
     /** Custom onEventHandler for when a custom message is received from the thread */
     onEventHandler?: ((event: any) => any),
+    /** Custom onEventHandler for when a custom message is received from the thread */
+    onTransferHandler?: ((transferEvent: any) => any),
     /** Custom onErrorHandler for when an error is received from the thread */
     onErrorHandler?: ((err: any) => any),
     /**
@@ -324,6 +334,7 @@ export class Thread {
     private threadId: string
     private incWorkId: number = 0
     private handler: ((_: any) => any) | undefined
+    private transferHandler: ((_: any) => any) | undefined
     private errHandler: ((_: any) => any) | undefined
     private closeHandler: ((_: Thread) => any) | undefined
 
@@ -355,6 +366,7 @@ export class Thread {
         this.handler = options?.onEventHandler
         this.errHandler = options?.onErrorHandler
         this.closeHandler = options?.closeHandler
+        this.transferHandler = options?.onTransferHandler
 
         this.worker.onmessage = (e) => {
             doLogs && console.log(curThreadId, 'Received message from ' + this.threadId, e)
@@ -434,6 +446,15 @@ export class Thread {
                     }
                     return
                 }
+                else if (e.data.hasOwnProperty('transfer')) {
+                    if (this.transferHandler) {
+                        this.transferHandler(e.data.message)
+                    }
+                    else if (this.handler) {
+                        this.handler(e)
+                    }
+                    return
+                }
                 else {
                     throw new Error('INVALID SYSTEM EVENT!')
                 }
@@ -477,7 +498,7 @@ export class Thread {
     }
 
     /**
-     * Set the handler for receiving custom `postMessage` events from the thread (only needed if you define your own protocol ontop of the Threads protocol)
+     * Set the handler for receiving custom `postMessage` events from the thread
      * @param h Handler for when an event is sent back from the event
      */
     public setOnEvent(h: ((_: any) => any) | undefined) {
@@ -485,7 +506,15 @@ export class Thread {
     }
 
     /**
-     * Set the handler for receiving custom `postMessage` events from the thread (only needed if you define your own protocol ontop of the Threads protocol)
+     * Set the handler for receiving transferred objects from the thread
+     * @param h Handler for when ownership transferred
+     */
+    public setOnTransfer(h: ((_: any) => any) | undefined) {
+        this.transferHandler = h
+    }
+
+    /**
+     * Set the handler for receiving custom `postMessage` events from the thread
      * @param h Handler for when there is an error from the thread
      */
     public setOnError(h: ((_: any) => any) | undefined) {
@@ -541,13 +570,14 @@ export class Thread {
     /**
      * Send a custom event to the thread
      * @param event Event to send
+     * @param options Options for sending an event
      */
-    public sendEvent(event: any) {
+    public sendEvent(event: any, options?: StructuredSerializeOptions): void {
         if (this.killed) {
             throw new Error("Invalid Operation! Thread is stopped!")
         }
         doLogs && console.log(curThreadId, `Sending custom event to thread ${this.threadId}`, event)
-        this.worker.postMessage(event)
+        this.worker.postMessage(event, options)
     }
 
     /**
@@ -678,6 +708,17 @@ if (typeof self !== 'undefined') {
      * Gets the current thread id
      */
     (self as any).curThread = () => curThreadId;
+
+    (self as any).transfer = (message: any, items: any[]) => {
+        if (!Array.isArray(items)) {
+            if (!items) {
+                items = []
+            } else {
+                items = [items]
+            }
+        }
+        postMessage({__system: true, transfer: true, message, items}, {transfer: items})
+    };
 
     (self as any).sendError = sendError
     self.onmessage = async (e: MessageEvent) => {

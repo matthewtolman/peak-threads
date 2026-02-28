@@ -1,13 +1,24 @@
+/*
+    Copyright Matthew Tolman, 2026
+
+    This Source Code Form is subject to the terms of the Mozilla Public
+    License, v. 2.0. If a copy of the MPL was not distributed with this
+    file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 import type {ElementLayout} from "./types.ts";
-import {Address, make} from "./memory.ts";
+import {Address, type DehydratedAddress, make} from "./memory.ts";
+
+export interface DehydratedWaitGroup {
+    addr: DehydratedAddress<Int32Array>
+}
 
 /**
  * Defines a Go-style wait group where tasks are "added" by the scheduler and then marked "done" by a worker.
  * Another thread can wait until all the tasks are done
  */
 export class WaitGroup {
-    private memory: Int32Array
-    private offset: number
+    private addr: Address<Int32Array>
 
     public static ELEMENT_LAYOUT: ElementLayout = ['int32']
     public static HYDRATION_KEY = '__threads_WaitGroup'
@@ -18,8 +29,7 @@ export class WaitGroup {
      * @param address
      */
     constructor(address: Address<Int32Array>) {
-        this.memory = address.memory()
-        this.offset = address.offset()
+        this.addr = address
     }
 
     /**
@@ -34,19 +44,17 @@ export class WaitGroup {
      * @param memory Memory for the hydration
      * @param offset Offset of waitgroup address
      */
-    static hydrate({memory, offset}: { memory: Int32Array, offset: number }) {
-        const addr = new Address(memory, offset, 1)
-        return new WaitGroup(addr)
+    static hydrate({addr}: DehydratedWaitGroup) {
+        return new WaitGroup(Address.hydrate(addr))
     }
 
     /**
      * Dehydrates a WaitGroup into a sendable format
      * @param wg wait group to dehydrate
      */
-    static dehydrate(wg: WaitGroup) {
+    static dehydrate(wg: WaitGroup): DehydratedWaitGroup {
         return {
-            memory: wg.memory,
-            offset: wg.offset,
+            addr: Address.dehydrate(wg.addr)
         }
     }
 
@@ -55,15 +63,15 @@ export class WaitGroup {
      * @param count Number of tasks to add (defaults to 1)
      */
     public add(count: number = 1) {
-        Atomics.add(this.memory, this.offset, count)
+        this.addr.atomicAdd(count)
     }
 
     /**
      * Marks a single task as done
      */
     public done() {
-        if (Atomics.sub(this.memory, this.offset, 1) <= 1) {
-            Atomics.notify(this.memory, this.offset)
+        if (this.addr.atomicSub(1) <= 1) {
+            this.addr.atomicNotifyAll()
         }
     }
 
@@ -76,12 +84,12 @@ export class WaitGroup {
     public wait(timeout: number = Infinity) {
         let lastTime = Date.now()
         while (true) {
-            const cur = Atomics.load(this.memory, this.offset);
+            const cur = this.addr.atomicLoad()
             if (cur == 0) {
                 return true;
             }
 
-            if (Atomics.wait(this.memory, this.offset, cur, timeout) === 'timed-out') {
+            if (this.addr.atomicWait(cur, timeout) === 'timed-out') {
                 return false
             }
 
@@ -109,21 +117,13 @@ export class WaitGroup {
 
         let lastTime = Date.now()
         while (true) {
-            const cur = Atomics.load(this.memory, this.offset);
+            const cur = this.addr.atomicLoad()
             if (cur === 0) {
                 return true;
             }
 
-            const {async, value} = (Atomics as any).waitAsync(this.memory, this.offset, cur, timeout)
-            if (async) {
-                if (await value === 'timed-out') {
-                    return false
-                }
-            } else if (value === 'timed-out') {
+            if (await this.addr.atomicWaitAsync(cur, timeout) === 'timed-out') {
                 return false
-            }
-            else {
-                await new Promise((resolve) => resolve(null))
             }
 
             if (Number.isFinite(timeout)) {
