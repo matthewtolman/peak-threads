@@ -14,8 +14,8 @@ export interface DehydratedWaitGroup {
 }
 
 /**
- * Defines a Go-style wait group where tasks are "added" by the scheduler and then marked "done" by a worker.
- * Another thread can wait until all the tasks are done
+ * Defines a Go-style wait group where tasks are "added" by the scheduler and then marked "done" by worker threads.
+ * A {@link Thread} can wait until all the tasks are done by calling "wait".
  */
 export class WaitGroup {
     private addr: Address<Int32Array>
@@ -25,7 +25,7 @@ export class WaitGroup {
 
     /**
      * Creates a new WaitGroup from an address
-     * Recommended to use @see make
+     * Recommended to use make
      * @param address
      */
     constructor(address: Address<Int32Array>) {

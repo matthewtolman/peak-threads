@@ -15,10 +15,10 @@ export interface DehydratedConditionVariable {
 }
 
 /**
- * A condition variable that can be shared across threads.
- * Allow threads to wait for a condition to change and notify each other when the condition chanes.
+ * A condition variable that can be shared across threads (see {@link Thread}).
+ * Allow threads to wait for a condition to change and notify each other when the condition changes.
  *
- * Use @see make for creating a condition variable.
+ * Use {@link ConditionVariable.make} for creating a condition variable.
  */
 export class ConditionVariable {
     private addr: Address<Int32Array>
@@ -29,7 +29,7 @@ export class ConditionVariable {
     public static HYDRATION_KEY = '__threads_ConditionVariable'
 
     /**
-     * Creates a new Condition variable. Prefer calling @see make
+     * Creates a new Condition variable. Prefer calling make
      * @param address The address for the barrier (must be 2 32-bit signed integers in size)
      * @param address
      */

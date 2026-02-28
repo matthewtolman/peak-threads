@@ -9,12 +9,22 @@
 import type {ElementLayout} from "./types.ts";
 import {Address, type DehydratedAddress, make} from "./memory.ts";
 
+/**
+ * Dehydrated mutex. Mostly useful for defining dehydrated interfaces for objects having a mutex
+ */
 export interface DehydratedMutex {
     addr: DehydratedAddress<Int32Array>
 }
 
 let held: Mutex[] = []
 
+/**
+ * A Mutex (mutually exclusive lock) that will only allow one thread to hold the lock at any point in time.
+ * This is useful if you need to lock some piece of shared memory or other resource shared between threads.
+ *
+ * Generally, when making a mutex you'll want to use {@link Mutex.make}.
+ * Though, if you are wanting to manually setup memory, you can also call the constructor and pass in an {@link Address} too.
+ */
 export class Mutex {
     private static unlocked = 0
     private static locked = 1
@@ -26,7 +36,7 @@ export class Mutex {
     private addr: Address<Int32Array>
 
     /**
-     * Creates a new Mutex (recommended to use the static @see make function)
+     * Creates a new Mutex (recommended to use the static make function)
      * @param address
      */
     constructor(address: Address<Int32Array>) {

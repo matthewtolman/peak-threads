@@ -13,10 +13,10 @@ import {Address, type DehydratedAddress, make} from './memory.ts'
 export interface DehydratedBarrier{ mux: DehydratedMutex, addr: DehydratedAddress<Int32Array>, maxNeeded: number }
 
 /**
- * A synchronization barrier that can be shared across threads.
+ * A synchronization barrier that can be shared across multiple threads (see {@link Thread}).
  * Allows threads to block until some number of other threads hit the same barrier. Then all threads proceed simultaneously.
  *
- * Use @see make for creating a barrier.
+ * Use {@link Barrier.make} for creating a barrier.
  */
 export class Barrier {
     private addr: Address<Int32Array>
@@ -29,7 +29,7 @@ export class Barrier {
     public static HYDRATION_KEY = '__threads_Barrier'
 
     /**
-     * Creates a new barrier. Prefer calling @see make
+     * Creates a new barrier. Prefer calling make
      * @param mux The mutex (or address for the mutex) to use for the barrier
      * @param addr The address to store barrier-state into
      * @param needed How many threads must hit the barrier before proceeding

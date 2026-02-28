@@ -18,6 +18,17 @@ let incThreadId = 0
 
 let doLogs = false
 
+/**
+ * Sets whether the built-in debug logs should be turned on or not. Must be turned on per-thread (including the main thread).
+ *
+ * Debug logging includes {@link Thread} activities (spawn, close, send, receive, etc.). In the future, it may include
+ * other activities.
+ *
+ * Primary use is for debugging complex thread interactions. Each debug log will be prefixed with the {@link Thread} id.
+ * Thread ids show the hierarchy that they were spawned with (e.g. `main->4->1->10`) and which child thread it was in each hierarchy.
+ *
+ * @param logging Set to `true` to turn on logs, `false` to turn off (off by default)
+ */
 export function setLogging(logging: boolean) {
     doLogs = logging
 }
@@ -32,6 +43,8 @@ export function setLogging(logging: boolean) {
  * All "is-a" checks are done with the `instanceof` operator based on the inverse-order items are registered,
  * such that newer registrations will take precedence over older registrations. This allows registering a base class
  * first, and then registering the child-classes later to have child-classes take precedence.
+ *
+ * See also {@link DehydrationFunctions}, {@link registerDeHydration}
  */
 export interface DehydrationClass {
     /**
@@ -46,6 +59,12 @@ export interface DehydrationClass {
 
 /**
  * Definition of a function-based dehydration registration where the dehydration information is cleaned from functions.
+ * Three functions need to be defined: `isa`, `hydrate`, `dehydrate`. All of these must be synchronous.
+ *
+ * The `isa` function will check if the dehydration rule applies. The `dehydrate` does dehydration and `hydrate`
+ * does hydration.
+ *
+ * See also {@link DehydrationClass}, {@link registerDeHydration}
  */
 export interface DehydrationFunctions {
     /**
@@ -128,10 +147,11 @@ const dehydrationList: Array<DehydrationClass | DehydrationFunctions> = [
 ]
 
 /**
- * Registers a new (De)Hydration ruleset. For the rulesets, @see DehydrationFunctions and @see DehydrationClass.
+ * Registers a new (De)Hydration ruleset. For the rulesets, see {@link DehydrationFunctions} and {@link DehydrationClass}.
  * Throws if the dehydration ruleset is invalid or if it is not unique
  *
- * These new rulsets will be executed automatically when using a Thread class to send/receive messages between threads.
+ * These new rulsets will be executed automatically when using a {@link Thread} class to send/receive messages between threads.
+ * Dehydration priority is based on inverse registration order (i.e. if you register dehydrator B then A, dehydrator A will be checked first then B).
  *
  * @param ruleset The dehydration ruleset
  */
@@ -291,7 +311,7 @@ export interface ThreadOptions {
 /**
  * Encapsulates another thread running and provides an interface for cooperating with said thread.
  *
- * For creating another thread, use @see spawn and await on the promise it returns.
+ * For creating another thread, use spawn and await on the promise it returns.
  * The reason for the await is that the spawn method handles initialization of the thread for first use.
  * Using the thread before the promise resolves is undefined behavior
  *
@@ -301,6 +321,8 @@ export interface ThreadOptions {
  * NOT get passed to any custom handlers you have registered.
  *
  * > This means that for custom events/protocols, you'll either need to ommit the `__system` key (recommended) or set it to false.
+ *
+ * ## System Protocol
  *
  * If the `__system: true` key/value pair is set to true, then the following determination for processing is used:
  *  - If there is a `__error` field, then the result is an error object
@@ -327,6 +349,32 @@ export interface ThreadOptions {
  * If an event is not a system event (aka. it does NOT have the key/value pair `__system: true`), then it is a custom/user-defined event.
  * In that case, the `onevent` method is called. If a promsie is returned from `onevent` it will be awaited to track "in-flight" events (used for graceful shutdown).
  * However, the return value of `onevent` will not be retransmitted. It is up to the developer to call `postMessage` to send any information across (if desired).
+ *
+ * ## Global Handles Inside a Thread's Script
+ *
+ * This is the list of possible global handles that can be defined inside a thread (your 'worker.js' essentially):
+ *
+ * * `onclose` - Called when the parent thread asks the child thread to close (but not when the child thread tries to close itself)
+ *  * If a promise is returned, it will be awaited. Return value not sent back to the parent thread
+ * * `oninit` - Called once when the parent thread initializes the child thread
+ *  * If a promise is returned, it will be awaited. Return value not sent back to the parent thread
+ * * `onshare` - Called when the parent thread shares new resources or data with the child thread
+ *  * If a promise is returned, it will be awaited. Return value not sent back to the parent thread
+ * * `ontransfer` - Called when the parent thread transfers ownership of some memory to the child thread
+ *  * If a promise is returned, it will be awaited. Return value not sent back to the parent thread
+ * * `onwork` - Called when the parent thread sends some piece of work to the child thread
+ *  * If a promise is returned, it will be awaited. Return value **will** be sent back to the parent thread
+ * * `onevent` - Called when either a custom event is sent to the worker thread, or when one of the above handlers is missing and an event comes in that would have gone to one of the above (uses `onevent` as a catch-all)
+ *
+ * See Also
+ *
+ * ### Additional Global Methods Provided for a Thread's Script
+ *
+ * This is the list of global functions defined inside a thread on import (your 'worker.js' essentially):
+ *
+ * * `numMessagesProcessing(): number` - Gets the number of outstanding messages currently being processed (useful for custom `onclose` handles)
+ * * `curThread(): string` - Gets the current thread's ID
+ * * `transfer(message: any, items: []any): void` - Transfers ownership of a resource to the parent thread
  *
  */
 export class Thread {
@@ -498,6 +546,13 @@ export class Thread {
     }
 
     /**
+     * Gets the thread's corresponding thread id
+     */
+    public id(): string {
+        return this.threadId
+    }
+
+    /**
      * Set the handler for receiving custom `postMessage` events from the thread
      * @param h Handler for when an event is sent back from the event
      */
@@ -654,6 +709,11 @@ export class Thread {
         this.closeThread()
     }
 
+    /**
+     * Attempts to gracefully close a thread.
+     * Will call the custon `onclose` handle in the thread if it is present.
+     * Will try waiting for all in-flight messages to finish processing. However, if the wait times out, then a force kill will be issued.
+     */
     public close() {
         doLogs && console.log(curThreadId, `Gracefully shutting down thread ${this.threadId}`)
         this.killed = true

@@ -201,7 +201,7 @@ import '@matttolman/threads'
 import {Person} from './person'
 
 oninit = (person: Person) => {
-    console.log('Is adult?', person.isAdultUS())
+    console.log('Is adult?', person.isAdultUs())
 }
 ```
 

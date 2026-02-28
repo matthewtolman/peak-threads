@@ -17,7 +17,7 @@ export interface DehydratedAddress<T extends TypedArray> {
 /**
  * Represents an address to some typed data (e.g. 32-bit integer) or an array of the same typed data.
  * This address can be shared to read/modify the same value across a program.
- * If backed by a SharedArrayBuffer, it can also be used to share data between threads.
+ * If backed by a [SharedArrayBuffer](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer), it can also be used to share data between threads (see {@link Thread}).
  *
  * Generally, any class which needs "shared memory" will use an Address to wrap it.
  */
@@ -90,7 +90,6 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
 
     /**
      * Gets the raw underlying memory
-     * CAUTION! THIS MEMORY MAY BE SHARED BETWEEN MULTIPLE ADDRESSES! iT'S UP TO YOU (THE DEVELOPER) TO ENFORCE BOUNDARIES BETWEEN ADDRESSES WHEN YOU USE THIS METHOD!
      */
     public memory(): T {
         return this.mem
@@ -98,7 +97,6 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
 
     /**
      * Gets the raw underlying offset of the address
-     * CAUTION! THIS MEMORY MAY BE SHARED BETWEEN MULTIPLE ADDRESSES! iT'S UP TO YOU (THE DEVELOPER) TO ENFORCE BOUNDARIES BETWEEN ADDRESSES WHEN YOU USE THIS METHOD!
      */
     public offset(): number {
         return this.indx
@@ -106,7 +104,6 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
 
     /**
      * Gets the raw underlying length of the typed array slice owned by the address
-     * CAUTION! THIS MEMORY MAY BE SHARED BETWEEN MULTIPLE ADDRESSES! iT'S UP TO YOU (THE DEVELOPER) TO ENFORCE BOUNDARIES BETWEEN ADDRESSES WHEN YOU USE THIS METHOD!
      */
     public count(): number {
         return this.cnt
@@ -390,18 +387,19 @@ export class Address<T extends TypedArray, R = T extends BigIntTypedArray ? bigi
  *
  * The makeable type must have the following static types defined:
  * - ELEMENT_LAYOUT
- *      - An array of either element types (e.g. 'int8', 'uint8', 'f64'; @see ElementLayoutItem) or a tuple of element type and a numeric count (e.g. `['int8', 3]`)
+ *      - An array of either element types (e.g. 'int8', 'uint8', 'f64', see {@link ElementLayoutItem}) or a tuple of element type and a numeric count (e.g. `['int8', 3]`; see {@link ElementLayout})
  *
- * Additionally, a makeable type MUST take in a series of @see Address constructor parameters corresponding to each element layout item.
+ * Additionally, a makeable type MUST take in a series of {@link Address} constructor parameters corresponding to each element layout item.
  * If a tuple with numeric count was defined, then a single address with a numeric count will be provided corresponding to that tuple.
+ * When types are mixed, this will add alignment padding automatically between types of different sizes.
  *
- * Furthermore, all Address constructor parameters MUST come first in the constructor list. All other parameters must follow.
+ * Furthermore, all {@link Address} constructor parameters MUST come first in the constructor list. All other parameters must follow.
  *
- * With those conditions in-place, we can now use "make" to make a new instance with those memory addresses backed by a SharedArrayBuffer.
+ * With those conditions in-place, we can now use "make" to make a new instance with those memory addresses backed by a [SharedArrayBuffer](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer).
  * To use make, simply pass in the Type and any additional arguments for the constructor (e.g. `make(Semaphore, 4)`)
  *
- * @param Type
- * @param args
+ * @param Type Class to make an instance of
+ * @param args Additional (non-address) arguments to pass to the constructor
  */
 export function make<T>(Type: T, ...args: any[]) {
     let curBytes = 0

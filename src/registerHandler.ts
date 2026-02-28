@@ -6,7 +6,14 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-export function RegisterHandler(handler: (_?: any) => any, type = 'event') {
+/**
+ * Registers a global handler. Can only be called from a {@link Thread} that is spawned (not from the main thread).
+ *
+ * @param handler Handler function to register
+ * @param type Type of handler to register (event = onevent, init = oninit, share = onshare, etc.)
+ * @constructor
+ */
+export function registerHandler(handler: (_?: any, _1?: any) => any, type: 'init'|'event'|'share'|'transfer'|'work'|'close' = 'event') {
     if (self) {
         switch (type) {
             case 'init':

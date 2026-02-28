@@ -22,12 +22,17 @@ export type TypedArray =
     | BigInt64Array<ArrayBufferLike>
     | BigUint64Array<ArrayBufferLike>;
 
+/**
+ * Type for typed arrays that require use of the `bigint` type
+ */
 export type BigIntTypedArray =
     | BigInt64Array<ArrayBufferLike>
     | BigUint64Array<ArrayBufferLike>;
 
 /**
- * Type string definitions for use with @see make
+ * Type string definitions for use with {@link make} auto-allocation.
+ *
+ * See also {@link ElementLayout}
  */
 export type ElementLayoutItem =
     | 'int8'
@@ -43,6 +48,6 @@ export type ElementLayoutItem =
     | 'f64';
 
 /**
- * Memory layout definitions for use with @see make
+ * Memory layout definitions for use with {@link make} auto-allocation.
  */
 export type ElementLayout = Array<ElementLayoutItem | [ElementLayoutItem, number]>;

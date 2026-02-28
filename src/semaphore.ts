@@ -18,7 +18,9 @@ let held: Semaphore[] = []
 
 /**
  * A semaphore is a counting lock mechanism where there are n "resources" and a thread can acquire one of them
- * If a "resource" is not available, then it waits and blocks
+ * If a "resource" is not available, then it waits and blocks.
+ *
+ * Useful for throttling/pooling. If resource count is set to 1, then equivalent to a {@link Mutex}.
  */
 export class Semaphore {
     private addr: Address<Int32Array>

@@ -25,8 +25,8 @@ interface ThreadInfo {
 
 /**
  * Represents a pool of threads for sending and receiving work.
- * Underlying is an array of threads (@see Thread) that can grow and shrink.
- * When a pool is closed (e.g. idle timeout, close() called on it, etc.) then that thread will automatically be removed from the pool.
+ * Underlying is an array of threads ({@link Thread}) that can grow and shrink.
+ * When a pool is closed (e.g. idle timeout, {@link Thread.close}, etc.) then that thread will automatically be removed from the pool.
  * This pool will try to keep a minimum pool of threads alive (if told to).
  *
  * By default, uses a load-balanced mechanism where it picks a thread based on the least scheduled work.
@@ -137,10 +137,16 @@ export class ThreadPool {
         })
     }
 
+    /**
+     * Gets the maximum thread capacity of the pool
+     */
     public capacity() {
         return this.maxThreads
     }
 
+    /**
+     * Gets the current size (number of active threads) in the pool
+     */
     public size() {
         let s = 0
         for (const t of this.threads.slice(0, this.lastLive + 1)) {
@@ -202,8 +208,8 @@ export class ThreadPool {
     }
 
     /**
-     * Sends a job to the thread pool to be scheduled
-     * @param work
+     * Sends a job to the thread pool to be scheduled. May grow the pool if needed.
+     * @param work Work to send
      */
     public async sendWork(work: any) {
         const thread = (await this.selectThread())
