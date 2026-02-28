@@ -9,20 +9,23 @@
 const {Barrier, ThreadPool, Thread, Mutex, make, ConditionVariable, WaitGroup, Semaphore} = threads
 
 describe('Thread', () => {
-    threads.setLogging(false)
+    threads.setLogging(true)
 
-    it('is setup', async () => {
+    it('is setup', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         const thread = await Thread.spawn('worker1.js', {closeWhenIdle: 100})
         expect(thread).to.not.be.null
     })
 
-    it('can create thread', async () => {
+    it('can create thread', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         const thread = await Thread.spawn('worker1.js', {closeWhenIdle: 100})
         expect(thread).to.not.be.null
         expect(await thread.sendWork(4)).to.equal(16)
     })
 
-    it('event handler', async () => {
+    it('event handler', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         let resolve
         const p = new Promise((res) => {
             resolve = res
@@ -37,7 +40,8 @@ describe('Thread', () => {
         expect(await p).to.equal(45)
     })
 
-    it('share handler', async () => {
+    it('share handler', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         let resolve
         const p = new Promise((res) => {
             resolve = res
@@ -59,7 +63,8 @@ describe('Thread', () => {
         expect(await p).to.equal(99)
     })
 
-    it('share handler message', async () => {
+    it('share handler message', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         let resolve
         const p = new Promise((res) => {
             resolve = res
@@ -76,7 +81,8 @@ describe('Thread', () => {
         expect(await p).to.equal(55)
     })
 
-    it('transfer handler can be called', async () => {
+    it('transfer handler can be called', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         let resolve
         const p = new Promise((res) => {
             resolve = res
@@ -94,7 +100,8 @@ describe('Thread', () => {
         thread.close()
     })
 
-    it('transfer handler transfers ownership', async () => {
+    it('transfer handler transfers ownership', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         let resolve
         const p = new Promise((res) => {
             resolve = res
@@ -116,7 +123,8 @@ describe('Thread', () => {
         thread.kill()
     })
 
-    it('can transfer back', async () => {
+    it('can transfer back', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         let resolve
         let ints = new Int32Array(new ArrayBuffer(64))
         const p = new Promise((res) => {
@@ -139,7 +147,8 @@ describe('Thread', () => {
 })
 
 describe('ThreadPool', () => {
-    it('can create thread pool', async () => {
+    it('can create thread pool', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         const pool = await ThreadPool.spawn('worker1.js', {initData: 2})
         expect(pool).to.not.be.null
         expect(await pool.sendWork(4)).to.equal(16)
@@ -151,6 +160,7 @@ describe('ThreadPool', () => {
     })
 
     it('can create dynamic thread pool', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         this.timeout(30_000)
         const pool = await ThreadPool.spawn('worker-slow.js', {initData: 2, minThreads: 0, closeThreadWhenIdle: 10})
         expect(pool).to.not.be.null
@@ -193,7 +203,8 @@ describe('ThreadPool', () => {
         pool.kill()
     })
 
-    it('can create dynamic thread pool that dooes not shrink', async function () {
+    it('can create dynamic thread pool that does not shrink', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         this.timeout(30_000)
         const pool = await ThreadPool.spawn('worker-slow.js', {initData: 2, minThreads: 0})
         expect(pool).to.not.be.null
@@ -236,6 +247,7 @@ describe('ThreadPool', () => {
     })
 
     it('can handle bad workers', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         this.timeout(30_000)
         const pool = await ThreadPool.spawn('worker-bad.js', {initData: 2, minThreads: 0, closeThreadWhenIdle: 10})
         expect(pool).to.not.be.null
@@ -298,8 +310,9 @@ describe('ThreadPool', () => {
     })
 })
 
-describe('ConditionVariable', async () => {
+describe('ConditionVariable', async function() {
     it('can notify', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         const mux = Mutex.make()
         const cv = ConditionVariable.make()
         const mem = new Int32Array(new SharedArrayBuffer(64))
@@ -319,8 +332,9 @@ describe('ConditionVariable', async () => {
     })
 })
 
-describe('WaitGroup', async () => {
+describe('WaitGroup', async function() {
     it('can lock wait until tasks are done', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         const wg = WaitGroup.make()
         const mem = new Int32Array(new SharedArrayBuffer(64))
         const thread = await Thread.spawn('wait_group.js', {initData: {wg, mem}})
@@ -344,8 +358,9 @@ describe('WaitGroup', async () => {
     })
 })
 
-describe('Barrier', async () => {
+describe('Barrier', async function() {
     it('blocks until all threads hit the barrier', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         const bar = Barrier.make(3)
         const mem = new Int32Array(new SharedArrayBuffer(64))
         const thread1 = await Thread.spawn('barrier.js', {initData: {bar, mem}})
@@ -361,8 +376,9 @@ describe('Barrier', async () => {
     })
 })
 
-describe('Semaphore', async () => {
+describe('Semaphore', async function() {
     it('can lock when contended', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         this.timeout(30_000)
 
         for (let i = 0; i < 2; ++i) {
@@ -388,8 +404,9 @@ describe('Semaphore', async () => {
     })
 })
 
-describe('Mutex', async () => {
+describe('Mutex', async function() {
     it('can do basic locking', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         this.timeout(30_000)
         const w = 5
         const mux = Mutex.make()
@@ -410,6 +427,7 @@ describe('Mutex', async () => {
     })
 
     it('can lock when contended', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
         this.timeout(30_000)
         const w = 300
         const mux = Mutex.make()
