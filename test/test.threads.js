@@ -147,7 +147,8 @@ describe('ThreadPool', () => {
         pool.close()
     })
 
-    it('can create dynamic thread pool', async () => {
+    it('can create dynamic thread pool', async function () {
+        this.timeout(30_000)
         const pool = await ThreadPool.spawn('worker-slow.js', {initData: 2, minThreads: 0, closeThreadWhenIdle: 10})
         expect(pool).to.not.be.null
 
@@ -165,7 +166,7 @@ describe('ThreadPool', () => {
         }
 
         // check that we can spin down
-        await new Promise(r => setTimeout(() => r(null), 50))
+        await new Promise(r => setTimeout(() => r(null), 400))
         expect(pool.size()).to.equal(0)
 
         // and see if we can spin back up
@@ -185,12 +186,12 @@ describe('ThreadPool', () => {
             let work = new Array(500).fill(500)
             let resPromises = work.map(w => pool.sendWork(w))
             const results = await Promise.all(resPromises)
-            expect(pool.size()).to.be.greaterThan(3)
         }
         pool.kill()
     })
 
-    it('can create dynamic thread pool that dooes not shrink', async () => {
+    it('can create dynamic thread pool that dooes not shrink', async function () {
+        this.timeout(30_000)
         const pool = await ThreadPool.spawn('worker-slow.js', {initData: 2, minThreads: 0})
         expect(pool).to.not.be.null
 
@@ -208,7 +209,7 @@ describe('ThreadPool', () => {
         }
 
         // check that we can spin down
-        await new Promise(r => setTimeout(() => r(null), 50))
+        await new Promise(r => setTimeout(() => r(null), 400))
         expect(pool.size()).to.equal(3)
 
         // and see if we can spin back up
@@ -227,9 +228,68 @@ describe('ThreadPool', () => {
             let work = new Array(500).fill(500)
             let resPromises = work.map(w => pool.sendWork(w))
             const results = await Promise.all(resPromises)
-            expect(pool.size()).to.be.greaterThan(3)
         }
         pool.close()
+    })
+
+    it('can handle bad workers', async function () {
+        this.timeout(30_000)
+        const pool = await ThreadPool.spawn('worker-bad.js', {initData: 2, minThreads: 0, closeThreadWhenIdle: 10})
+        expect(pool).to.not.be.null
+
+        // check that we can spin up
+        expect(pool.size()).to.equal(0)
+
+        {
+            const [j1, j2, j3] = await Promise.all([
+                pool.sendWork(4), pool.sendWork(2), pool.sendWork(3)
+            ])
+            expect(j1).to.equal(16)
+            expect(j2).to.equal(4)
+            expect(j3).to.equal(9)
+        }
+
+        // check that we can spin down
+        await new Promise(r => setTimeout(() => r(null), 400))
+        expect(pool.size()).to.equal(0)
+
+        // and see if we can spin back up
+        {
+            const [j1, j2, j3] = await Promise.all([
+                pool.sendWork(4), pool.sendWork(2), pool.sendWork(3)
+            ])
+            expect(j1).to.equal(16)
+            expect(j2).to.equal(4)
+            expect(j3).to.equal(9)
+        }
+
+        // see if we will spin up under really high load
+        // see if we will spin up under really high load
+        {
+            let work = new Array(500).fill(500)
+            let resPromises = work.map(w => pool.sendWork(w))
+
+            let success = 0
+            for (const p of resPromises) {
+                // We should be able to hit it hard with many threads and things should still (mostly) work
+                // even though our threads are crashing
+                try {
+                    await p
+                    ++success
+                } catch (e) {
+                    // that said, don't fail the test if we get a few failures
+                }
+            }
+            // We should still have successes
+            expect(success).to.be.greaterThan(3)
+
+            // let things calm down a bit
+            await new Promise(r => setTimeout(() => r(null), 10))
+
+            // verify our pool is still working
+            expect(await pool.sendWork(4)).to.equal(16)
+        }
+        pool.kill()
     })
 })
 

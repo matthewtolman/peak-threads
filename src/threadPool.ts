@@ -14,6 +14,7 @@ export interface ThreadPoolOptions {
     maxThreads?: number,
     minThreads?: number,
     closeThreadWhenIdle?: number,
+    queueRetries?: number
 }
 
 interface ThreadInfo {
@@ -166,7 +167,7 @@ export class ThreadPool {
     private async selectThread(): Promise<Thread> {
         let attempt = 0
         let skipWait = false
-        const maxAttempts = 5
+        const maxAttempts = this.options?.queueRetries || 5
         while (attempt++ < maxAttempts) {
             if (attempt !== 1 && !skipWait) {
                 await new Promise((w) => setTimeout(() => w(null), 2 * attempt))
@@ -218,18 +219,32 @@ export class ThreadPool {
      * @param work Work to send
      */
     public async sendWork(work: any) {
-        if (this.closed) {
-            throw new Error('Cannot send work, pool is closed!')
-        }
-        const thread = (await this.selectThread())
-        if (this.closed) {
-            throw new Error('Cannot send work, pool is closed!')
-        }
-        try {
-            return await thread.sendWork(work)
-        }
-        finally {
-            thread.poolRelease()
+        const maxAttempts = this.options?.queueRetries || 5
+        for (let i = 0; i < maxAttempts; ++i) {
+            if (this.closed) {
+                throw new Error('Cannot send work, pool is closed!')
+            }
+            const thread = (await this.selectThread())
+            if (this.closed) {
+                throw new Error('Cannot send work, pool is closed!')
+            }
+
+            // we only retry if sending the work failed (usually happens when we send to a dead thread)
+            try {
+                return await thread.sendWork(work)
+            } catch (e: any) {
+                if (e && e.message && typeof e.message === 'string' && (e.message === "Thread stopped running!" || e.message === 'Thread is shutting down!')) {
+                    // wait for threads to clean up and try again
+                    // Note: for this loop we only retry if we send to a dead/dying thread, not for any other errors
+                    // The other errors are handled by a separate retry loop
+                    await new Promise((w) => setTimeout(() => w(null), 2 * i))
+                }
+                else {
+                    throw e
+                }
+            } finally {
+                thread.poolRelease()
+            }
         }
     }
 

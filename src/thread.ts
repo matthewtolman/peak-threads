@@ -353,7 +353,7 @@ export interface ThreadOptions {
  *
  * This is the list of possible global handles that can be defined inside a thread (your 'worker.js' essentially):
  *
- * * `onclose` - Called when the parent thread asks the child thread to close (but not when the child thread tries to close itself)
+ * * `onclose` - Called when the threads is asked to close (but not when it is killed)
  *  * If a promise is returned, it will be awaited. Return value not sent back to the parent thread
  * * `oninit` - Called once when the parent thread initializes the child thread
  *  * If a promise is returned, it will be awaited. Return value not sent back to the parent thread
@@ -364,6 +364,7 @@ export interface ThreadOptions {
  * * `onwork` - Called when the parent thread sends some piece of work to the child thread
  *  * If a promise is returned, it will be awaited. Return value **will** be sent back to the parent thread
  * * `onevent` - Called when either a custom event is sent to the worker thread, or when one of the above handlers is missing and an event comes in that would have gone to one of the above (uses `onevent` as a catch-all)
+ *   * If a promise is returned, it will be awaited. Return value not sent back to the parent thread.
  *
  * See also {@link registerHandler}
  *
@@ -710,7 +711,7 @@ export class Thread {
 
     /**
      * Attempts to gracefully close a thread.
-     * Will call the custon `onclose` handle in the thread if it is present.
+     * Will call the custom `onclose` handle in the thread if it is present.
      * Will try waiting for all in-flight messages to finish processing. However, if the wait times out, then a force kill will be issued.
      */
     public close() {
@@ -743,11 +744,41 @@ if (typeof self !== 'undefined') {
     let closing = false
     const oldClose = self.close
     self.close = (function () {
+        if (!closing) {
+            // notify asap that we're shutting down so the parent thread doesn't use us
+            postMessage({__system: true, __close: true})
+        }
         closing = true
         doLogs && console.log(curThreadId, 'Closing thread')
-        postMessage({__system: true, __close: true})
-        doLogs && console.log(curThreadId, 'Closed thread')
-        oldClose()
+
+        const cleanup = () => {
+            console.log(curThreadId, 'Closed thread')
+            oldClose()
+        }
+
+        if ((self as any).onclose) {
+            doLogs && console.log(curThreadId, 'Calling onclose');
+            const r = (self as any).onclose()
+
+            if (promiseLike(r)) {
+                if ('finally' in r && typeof r.finally === 'function') {
+                    r.finally(cleanup)
+                }
+                else if ('catch' in r && typeof r.catch === 'function') {
+                    r
+                        .then(cleanup)
+                        .catch((err: any) => {
+                            console.error(curThreadId, "onclose had error, attempting to finish cleanup", err)
+                            cleanup()
+                        })
+                }
+                else {
+                    r.then(cleanup)
+                }
+                return
+            }
+        }
+        cleanup()
     })
 
     let threadIdleTimeout: any = null
@@ -782,7 +813,8 @@ if (typeof self !== 'undefined') {
     (self as any).sendError = sendError
     self.onmessage = async (e: MessageEvent) => {
         if (closing) {
-            sendError(new Error(`Thread ${curThreadId} is shutting down!`))
+            console.error(curThreadId, 'Thread is shutting down but receiving messages!')
+            sendError(new Error(`Thread is shutting down!`))
         }
 
         if (threadIdleTimeout) {
@@ -871,20 +903,18 @@ if (typeof self !== 'undefined') {
                             postMessage({__system: true, __initd: true})
                             doLogs && console.log(curThreadId, 'Thread ready!')
                         } else if ('__close' in e.data) {
-                            closing = true
+                            if (!closing) {
+                                // notify asap that we're shutting down so the parent thread doesn't use us
+                                closing = true
+                                postMessage({__system: true, __close: true})
+                            }
                             try {
                                 doLogs && console.log(curThreadId, 'Attempting graceful shutdown...')
-                                // exclude this message from "processing" temporarily to make the onclose handler easier to write
+                                // exclude this message from "processing" temporarily to make the waiting protocol easier to write
                                 // We don't want to confuse devs who are waiting for all messages to finish processing
                                 --messagesProcessing
-                                if ((self as any).onclose) {
-                                    doLogs && console.log(curThreadId, 'Calling onclose')
-                                    const res = (self as any).onclose()
-                                    if (promiseLike(res)) {
-                                        await res
-                                    }
-                                }
 
+                                // Wait up to 1 second for in-flight messages to close gracefully
                                 let attempt = 0
                                 const maxAttempts = 10
                                 doLogs && console.log(curThreadId, 'Outstanding events: ', messagesProcessing)
@@ -899,6 +929,7 @@ if (typeof self !== 'undefined') {
                                     console.error(curThreadId, `Failed to wait for in-flight messages to finish! Potential deadlock! Force killing thread!`)
                                 }
 
+                                // Do the actual close (this will call the `onclose` handler and give a final chance to clean things up properly)
                                 self.close()
                             }
                             finally {
