@@ -116,32 +116,11 @@ const dehydrationList: Array<DehydrationClass | DehydrationFunctions> = [
             }
         },
         hydrate: (value: { name: string, stack: string, message: string, cause: unknown | undefined }) => {
-            value.cause = hydrate(value.cause)
-
-            if (typeof window !== 'undefined' && value.name in window) {
-                try {
-                    const res = new (window[value.name as any] as any)(value.message, value.cause)
-                    res.stack = value.stack
-                    return res
-                } catch (e) {
-                }
-            } else if (typeof self !== 'undefined' && value.name in self) {
-                try {
-                    const res = new (self[value.name as any] as any)(value.message, value.cause)
-                    res.stack = value.stack
-                    return res
-                } catch (e) {
-                }
-            }
-
-            const res = new Error(value.message, value.cause as any)
-            try {
-                res.name = value.name
-                res.stack = value.stack
-            } catch (e) {
-            }
-
-            return res
+            console.error(value)
+            let e = new Error(value.message, {cause: value.cause})
+            e.stack = value.stack
+            console.error(e)
+            return e
         }
     }
 ]
@@ -258,9 +237,9 @@ function hydrate(obj: any): any {
         } else {
             for (const de of dehydrationList) {
                 if ('type' in de) {
-                    return de.type.hydrate(obj, type)
+                    return de.type.hydrate(obj.__value, type)
                 } else if ('isa' in de) {
-                    return de.hydrate(obj, type)
+                    return de.hydrate(obj.__value, type)
                 }
             }
         }
@@ -305,6 +284,43 @@ export interface ThreadOptions {
      * Custom handler for when a thread is closed/killed
      */
     closeHandler?: (thread: Thread) => any,
+    /**
+     * Type option to pass directly to the worker constructor. Often set to "module" when using esm modules
+     */
+    type?: 'classic' | 'module',
+    /**
+     * Name option to pass directly to the worker constructor. Mostly useful for debugging purposes.
+     * NOTE: this does not impact the peaks-threads id assigned to each worker
+     */
+    name?: string,
+    /**
+     * Determines how credentials are sent when using `fetch()` which will be passed directly to the worker constructor
+     */
+    credentials?: 'omit' | 'same-origin' | 'include',
+}
+
+
+/**
+ * Options for connecting to a shared thread
+ */
+export interface SharedThreadOptions {
+    /** Initial data for the connection (passed to `oninit`) */
+    initData?: any,
+    /** Custom onEventHandler for when a custom message is received from the thread */
+    onEventHandler?: ((event: any) => any),
+    /** Custom onEventHandler for when a custom message is received from the thread */
+    onTransferHandler?: ((transferEvent: any) => any),
+    /** Custom onErrorHandler for when an error is received from the thread */
+    onErrorHandler?: ((err: any) => any),
+    /** Custom onCloseHandler for when a port is closed */
+    onCloseHandler?: ((thread: SharedThread) => any),
+    /**
+     * If set, then the connection will automatically close if it has not received a message after so many milliseconds.
+     *
+     * **IMPORTANT!** If you are sharing memory and using condition variables/wait groups/mutexes/semaphores/barriers, then this could cause the thread to die
+     * while it is holding shared resources!
+     */
+    closeWhenIdle?: number,
     /**
      * Type option to pass directly to the worker constructor. Often set to "module" when using esm modules
      */
@@ -538,10 +554,16 @@ export class Thread {
 
         this.worker.onerror = (e) => {
             console.error(`Thread ${this.threadId} had an error!`, e)
+            if (this.errHandler) {
+                this.errHandler(e)
+            }
         }
 
         this.worker.onmessageerror = (e) => {
             console.error(`Cound not send message to thread ${this.threadId}!`, e)
+            if (this.errHandler) {
+                this.errHandler(e)
+            }
         }
     }
 
@@ -756,6 +778,381 @@ export class Thread {
     }
 }
 
+/**
+ * Represents a shared thread.
+ * Shared threads are shared across browser contexts (tabs, windows, iframes).
+ * They are unique per url, so you can't spin up multiple of the same shared thread.
+ * Additionally, since they're shared they cannot be controlled as tightly as a normal {@link Thread}.
+ *
+ * They're useful for resource consolidation, as well as for sharing data across contexts (e.g. caches, thread pools).
+ * However, be careful as you need to use cache busting to "upgrade" them!
+ * In other-words, you need a new URL whenever the code changes, so you'll have a shared thread _per version_ not per client.
+ *
+ * Shared threads have a lot of oddities due to the oddities of the underlying SharedWorker API. For instance,
+ * we "connect" to them with ports and we "disconnect" by closing the port not the thread.
+ * The help reinforce this, the API is intentionally different from the {@link Thread} API since concepts do not map across.
+ *
+ * Also, there is no "thread pool" for shared threads since we can't pool them. Instead, you'd create a single "pool" shared
+ * thread and have the thread pool be inside the shared thread. Then you'd talk to the shared thread which then delegates to the pool.
+ *
+ * Also, handlers in a shared thread always get an extra parameter - the {@link Connection} representing who they're talking to.
+ * You will need to call {@link Connection.postMessage}, {@link Connection.transfer}, and so on rather than a global postMessage
+ * or a global transfer.
+ *
+ * Finally, you'll need to use {@link registerSharedHandler} rather than registerHandler for registering shared thread handlers.
+ * This does mean that the "thread" and "shared thread" code is not compatible across each other. That's part of the Web API design,
+ * and instead of trying to hide it (most likely by adding a "connection" to the Thread-side) we decided to embrace it.
+ * Again, the semantics are different, how things work are different, and if you're not aware then you will run into issues.
+ */
+export class SharedThread {
+    private worker: SharedWorker
+    private incWorkId: number = 0
+    private handler: ((_: any) => any) | undefined
+    private transferHandler: ((_: any) => any) | undefined
+    private closeHandler: ((_: SharedThread) => any) | undefined
+    private errHandler: ((_: any) => any) | undefined
+
+    private workQueue: {
+        [id: string]: {
+            res: (_: any) => any,
+            rej: (_: any) => any,
+        }
+    } = {}
+    private disconnected: boolean = false
+    private pending: number = 0;
+    private script: string
+
+    private constructor(res: any, rej: any, script: string, options?: SharedThreadOptions) {
+        doLogs && console.log(curThreadId, 'Connecting to shared thread ' + script)
+        this.script = script
+
+        const workerOpts: any = {}
+
+        if (options?.type) {
+            workerOpts.type = options.type
+        }
+
+        if (options?.name) {
+            workerOpts.name = options.name
+        }
+
+        if (options?.credentials) {
+            workerOpts.credentials = options.credentials
+        }
+
+        this.worker = new SharedWorker(script, workerOpts)
+
+        this.worker.port.start()
+
+        const oldPostMessage = this.worker.port.postMessage.bind(this.worker.port)
+        this.worker.port.postMessage = (function (message: any, ...args: any[]) {
+            doLogs && console.log(curThreadId, 'Sending message to shared thread ' + script, message)
+            message = dehydrate(message)
+            doLogs && console.log(curThreadId, 'Dehydrated message to shared thread ' + script, message)
+            return oldPostMessage(message, ...args)
+        } as any).bind(this.worker.port)
+
+        this.worker.port.postMessage({
+            __system: true,
+            init: options?.initData || null,
+            threadId: this.script
+        })
+        this.handler = options?.onEventHandler
+        this.errHandler = options?.onErrorHandler
+        this.transferHandler = options?.onTransferHandler
+        this.closeHandler = options?.onCloseHandler
+
+        this.worker.port.onmessage = (e) => {
+            doLogs && console.log(curThreadId, 'Received message from ' + script, e)
+            e = {...e, data: hydrate(e.data)}
+
+            doLogs && console.log(curThreadId, 'Hydrated message from ' + script, e)
+            if (e.data && typeof e.data === 'object' && e.data.hasOwnProperty('__system') && e.data.__system) {
+                doLogs && console.log(curThreadId, 'System message from ' + script, e)
+                if (e.data.hasOwnProperty('__error')) {
+                    if (this.errHandler) {
+                        this.errHandler((e.data.__error))
+                    } else {
+                        console.error(`Received error from thread ${script}!`, e.data.__error)
+                        throw new Error(e.data.__error)
+                    }
+                } else if (e.data.hasOwnProperty('__close')) {
+                    doLogs && console.log(curThreadId, 'Thread ' + script + ' stopped running!', e)
+                    this.disconnected = true
+                    if (this.closeHandler) {
+                        this.closeHandler(this)
+                    }
+                } else if (e.data.hasOwnProperty('workId') && (e.data.hasOwnProperty('res') || e.data.hasOwnProperty('rej'))) {
+                    if (!this.workQueue.hasOwnProperty(e.data.workId)) {
+                        console.error("UNKNOWN JOB " + e.data.workId + ' FROM THREAD ' + script)
+                    } else {
+                        const {res, rej} = this.workQueue[e.data.workId]
+                        try {
+                            if (e.data.hasOwnProperty('res')) {
+                                doLogs && console.log(curThreadId, 'Thread ' + script + ' finished work ' + e.data.workId)
+                                res(e.data.res)
+                            } else {
+                                rej(e.data.rej || new Error('Bad response from worker thread'))
+                            }
+                        } finally {
+                            delete this.workQueue[e.data.workId]
+                            --this.pending
+                        }
+                        return
+                    }
+                } else if (e.data.hasOwnProperty('__initd')) {
+                    if (e.data.__initd) {
+                        res()
+                    } else {
+                        rej(e.data.__error || new Error('Initialization Failed!'))
+                        this.worker.port.close()
+                        this.disconnected = true
+                    }
+                    doLogs && console.log(curThreadId, 'Spawned thread ' + script)
+                } else if (e.data.hasOwnProperty('__shared')) {
+                    const {res, rej} = this.workQueue[e.data.__shared]
+                    try {
+                        if (e.data.hasOwnProperty(`__error`)) {
+                            rej(e.data.__error)
+                        } else {
+                            res(null)
+                        }
+                    } finally {
+                        delete this.workQueue[e.data.__shared]
+                        --this.pending
+                    }
+                    return
+                } else if (e.data.hasOwnProperty('__transferd')) {
+                    const {res, rej} = this.workQueue[e.data.__transferd]
+                    try {
+                        if (e.data.hasOwnProperty(`__error`)) {
+                            rej(e.data.__error)
+                        } else {
+                            res(null)
+                        }
+                    } finally {
+                        delete this.workQueue[e.data.__transferd]
+                        --this.pending
+                    }
+                    return
+                } else if (e.data.hasOwnProperty('transfer')) {
+                    if (this.transferHandler) {
+                        this.transferHandler(e.data.message)
+                    } else if (this.handler) {
+                        this.handler(e)
+                    }
+                    return
+                } else {
+                    throw new Error('INVALID SYSTEM EVENT!')
+                }
+            } else if (this.handler) {
+                doLogs && console.log(curThreadId, 'Custom message from ' + script + ' dispatched to handler')
+                this.handler(e)
+            } else {
+                doLogs && console.log(curThreadId, 'Unknown message from ' + script + ' and no handler registered!')
+            }
+        }
+
+        this.worker.onerror = (e) => {
+            console.error(`Thread ${this.script} had an error!`, e)
+            if (this.errHandler) {
+                this.errHandler(e)
+            }
+        }
+
+        this.worker.port.onmessageerror = (e) => {
+            console.error(`Cound not send message to thread ${this.script}!`, e)
+            if (this.errHandler) {
+                this.errHandler(e)
+            }
+        }
+    }
+
+    /**
+     * Connects to a shared thread
+     * @param script URI for the script that will be run by the thread (should include this library)
+     * @param options Options for initializing the thread
+     * @return A promise for when the thread is initialized (important to await the promise before using shared memory in any thread to avoid potential race conditions). Promise may reject if there was an initialization error.
+     */
+    public static connect(script: string, options?: SharedThreadOptions): Promise<SharedThread> {
+        return new Promise<SharedThread>((resolve, reject) => {
+            const t = new SharedThread(() => resolve(t), (err: any) => reject(err), script, options)
+        })
+    }
+
+    private nextWorkId() {
+        if (crypto && crypto.randomUUID) {
+            return this.script + ':' + crypto.randomUUID()
+        } else {
+            return this.script + ':' + (this.incWorkId++)
+        }
+    }
+
+    /**
+     * Gets the thread's corresponding thread id
+     */
+    public id(): string {
+        return this.script
+    }
+
+    /**
+     * Set the handler for receiving custom `postMessage` events from the thread
+     * @param h Handler for when an event is sent back from the event
+     */
+    public setOnEvent(h: ((_: any) => any) | undefined) {
+        this.handler = h
+    }
+
+    /**
+     * Set the handler for receiving transferred objects from the thread
+     * @param h Handler for when ownership transferred
+     */
+    public setOnTransfer(h: ((_: any) => any) | undefined) {
+        this.transferHandler = h
+    }
+
+    /**
+     * Set the handler for receiving custom `postMessage` events from the thread
+     * @param h Handler for when there is an error from the thread
+     */
+    public setOnError(h: ((_: any) => any) | undefined) {
+        this.errHandler = h
+    }
+
+    /**
+     * Sends some piece of work off to a thread and returns a promise waiting for a response
+     * @param work The work to send to the thread (passed to your `onwork` handler)
+     * @return Promise with the result object from doing the work
+     */
+    public sendWork<R = any>(work: any): Promise<R> {
+        if (this.disconnected) {
+            throw new Error("Invalid Operation! Thread is stopped!")
+        }
+        const workId = this.nextWorkId()
+        doLogs && console.log(curThreadId, `Sending work ${workId} to thread ${this.script}`, work)
+        ++this.pending
+        const promise = new Promise((res, rej) => {
+            this.workQueue[workId] = {res, rej}
+            this.worker.port.postMessage({__system: true, workId, work})
+        })
+        return promise as Promise<R>
+    }
+
+    /**
+     * Gets the number of pending requests that have a system-defined response for a thread
+     * This helps indicate how busy a thread is
+     */
+    public numPendingRequests(): number {
+        return this.pending
+    }
+
+    /**
+     * Send a custom event to the thread
+     * @param event Event to send
+     * @param options Options for sending an event
+     */
+    public sendEvent(event: any, options?: StructuredSerializeOptions): void {
+        if (this.disconnected) {
+            throw new Error("Invalid Operation! Thread is stopped!")
+        }
+        doLogs && console.log(curThreadId, `Sending custom event to thread ${this.script}`, event)
+        this.worker.port.postMessage(event, options)
+    }
+    /**
+     * Set the handler for when a thread is closed/killed
+     * @param h Handler for when a thread is closed/killed
+     */
+    public setOnClose(h: ((t: SharedThread) => any) | undefined) {
+        this.closeHandler = h
+    }
+
+    /**
+     * Gets the underlying worker from the thread.
+     * USE CAUTION WHEN USING THIS METHOD!
+     */
+    public raw() {
+        if (this.disconnected) {
+            throw new Error("Invalid Operation! Thread is stopped!")
+        }
+        return this.worker
+    }
+
+    /**
+     * Share an item (or items) with another thread.
+     * Often used when needing to pass synchronization primitives outside the initialization method
+     * @param item Item (or an array of items) that will be shared
+     * @param message Any additional message information to pass along
+     * @return A promise for when the share is complete (important to await the promise before using shared memory in any thread to avoid potential race conditions).
+     */
+    public share(item: any, message: any = undefined): Promise<void> {
+        if (this.disconnected) {
+            throw new Error("Invalid Operation! Thread is stopped!")
+        }
+        const shareId = this.nextWorkId()
+        ++this.pending
+        const promise = new Promise((res, rej) => {
+            doLogs && console.log(curThreadId, 'queued share', shareId)
+            this.workQueue[shareId] = {res, rej}
+        })
+        doLogs && console.log(curThreadId, `Sharing item with thread ${this.script}`, item, message)
+        if (typeof message != 'undefined') {
+            this.worker.port.postMessage({__system: true, shareId, share: item, message})
+        } else {
+            this.worker.port.postMessage({__system: true, shareId, share: item})
+        }
+        return promise as Promise<void>
+    }
+
+    /**
+     * Transfer ownership of data to a thread
+     * @param message Message to send indicating transfer information (should contain how the transferred object is accessed, like the TypedArray)
+     * @param items The items to transfer ownership of (often an underlying piece of the accessed objects, liek the TypedArray's buffer)
+     */
+    public transfer(message: any, items: any[]): Promise<void> {
+        if (this.disconnected) {
+            throw new Error("Invalid Operation! Thread is stopped!")
+        }
+        if (!Array.isArray(items)) {
+            if (!items) {
+                items = []
+            } else {
+                items = [items]
+            }
+        }
+        const transferId = this.nextWorkId()
+        ++this.pending
+        const promise = new Promise((res, rej) => {
+            doLogs && console.log(curThreadId, 'queued transfer', transferId)
+            this.workQueue[transferId] = {res, rej}
+        })
+        doLogs && console.log(curThreadId, `Transferring items to thread ${this.script}`, items, message)
+        this.worker.port.postMessage({__system: true, transfer: transferId, message, items}, {transfer: items})
+        return promise as Promise<void>
+    }
+
+    /**
+     * Disconnects from a port
+     */
+    public disconnect() {
+        doLogs && console.log(curThreadId, `Disconnecting from thread ${this.script}`)
+        this.disconnected = true
+        this.worker.port.postMessage({__system: true, __close: true})
+    }
+
+    /**
+     * Forces a disconnect
+     * NOTE: USE THIS WITH CAUTION SINCE IT WILL TERMINATE A THREAD WITHOUT ANY CLEANUP! THIS CAN LEAD TO DEADLOCKS, LIVELOCKS, AND OTHER ISSUES!
+     */
+    public sever() {
+        doLogs && console.log(curThreadId, `Disconnecting from thread ${this.script}`)
+        this.worker.port.close()
+        this.disconnected = true
+        if (this.closeHandler) {
+            this.closeHandler(this)
+        }
+    }
+}
+
 function promiseLike(p: any) {
     return p && (p instanceof Promise || ((typeof p === 'object' || typeof p === 'function') && 'then' in p && typeof p?.then === 'function'))
 }
@@ -765,6 +1162,20 @@ let threadIdle: number = 0
 let messagesProcessing: number = 0;
 
 /**
+ * Checks if we're in a dedicated worker context
+ */
+export function isDedicatedWorker(): boolean {
+    return typeof window === 'undefined' && !!(self && (self as any).postMessage)
+}
+
+/**
+ * Checks if we're in a shared worker context
+ */
+export function isSharedWorker(): boolean {
+    return typeof window === 'undefined' && self && !(self as any).postMessage
+}
+
+/**
  * Sends an error back to the parent thread. Useful to indicate a failure that happened locally to the parent process.
  *
  * **ONLY USABLE FROM CHILD THREADS!**
@@ -772,7 +1183,7 @@ let messagesProcessing: number = 0;
  * @param err Error to send
  */
 export function sendError(err: any) {
-    if (self) {
+    if (isDedicatedWorker()) {
         postMessage({__system: true, __error: err})
     } else {
         throw new Error('sendError only usable from worker thread!')
@@ -786,10 +1197,10 @@ export function sendError(err: any) {
  *
  */
 export function numMessagesProcessing(): number {
-    if (self) {
+    if (isDedicatedWorker() || isSharedWorker()) {
         return messagesProcessing
     } else {
-        throw new Error('numMessagesProcessing only usable from worker thread!')
+        throw new Error('numMessagesProcessing only usable from worker or shared worker thread!')
     }
 }
 
@@ -809,7 +1220,7 @@ export function curThread(): string {
  * @param items Memory ownership to transfer
  */
 export function transfer(message: any, items: any[]) {
-    if (self) {
+    if (self && !(self as any).onconnect) {
         if (!Array.isArray(items)) {
             if (!items) {
                 items = []
@@ -823,7 +1234,9 @@ export function transfer(message: any, items: any[]) {
     }
 }
 
-if (typeof self !== 'undefined') {
+if (isDedicatedWorker()) {
+    // Worker scope
+
     const oldPostMessage = self.postMessage
     self.postMessage = (function (message: any, ...args: any[]) {
         return oldPostMessage(dehydrate(message), ...args)
@@ -850,7 +1263,7 @@ if (typeof self !== 'undefined') {
         })
             .then(async () => {
                 // Shut down all incoming messages - we won't be allowing anything else to come through
-                closed = false
+                closed = true
                 doLogs && console.log(curThreadId, 'Attempting graceful shutdown...')
                 // exclude this message from "processing" temporarily to make the waiting protocol easier to write
                 // We don't want to confuse devs who are waiting for all messages to finish processing
@@ -994,7 +1407,7 @@ if (typeof self !== 'undefined') {
                         } else if ('__close' in e.data) {
                             self.close()
                         } else {
-                            throw new Error('INVALID SYSTEM EVENT!')
+                            throw new Error('INVALID SYSTEM EVENT!' + JSON.stringify(e.data))
                         }
                     } else if ((self as any).onevent) {
                         doLogs && console.log(curThreadId, "Message is a custom event!");
@@ -1040,5 +1453,266 @@ if (typeof self !== 'undefined') {
                 threadIdleTimeout = setTimeout(() => self.close(), threadIdle)
             }
         }
+    }
+}
+
+/**
+ * Represents a connection a shared thread has to another thread.
+ *
+ * Almost everything that is done with global methods in a Thread context are instead done on this object.
+ *
+ * These connection objects are unique per connection, and allow you to store connection data directly on them.
+ * Think of these as isolated channels.
+ *
+ * All shared worker handlers have these passed as the first parameter so that the handler can know who it's talking to
+ * and store any context information there.
+ */
+export class Connection {
+    private p: MessagePort
+    private messagesProcessing: number = 0
+    public context: any = {}
+    private closed: boolean = false
+
+    /**
+     * Builds a new connection. You will not need to call this directly in production code as these are made automatically for you
+     * @param p The message port to bind to
+     */
+    constructor(p: MessagePort) {
+        this.p = p
+        this.p.start()
+
+        const oldPostMessage = this.p.postMessage.bind(this.p)
+        this.p.postMessage = (function (message: any, ...args: any[]) {
+            return oldPostMessage(dehydrate(message), ...args)
+        }.bind(this.p) as any)
+
+        this.p.onmessage = async (e: MessageEvent) => {
+            if (this.closed) {
+                console.error(curThreadId, 'Thread is shutting down but receiving messages!')
+                this.sendError(new Error(`Thread is shutting down!`))
+            }
+
+            if (threadIdleTimeout) {
+                doLogs && console.log(curThreadId, 'Pausing idle timer for thread ' + curThreadId)
+                clearTimeout(threadIdleTimeout)
+                threadIdleTimeout = null
+            }
+            ++this.messagesProcessing
+            ++messagesProcessing
+
+            doLogs && console.log(curThreadId, "Received message", e, `Num messages active: ${this.messagesProcessing}`)
+
+            try {
+                try {
+                    e = {...e, data: hydrate(e.data)}
+                } catch (err) {
+                    console.error('HYDRATION FAILED!', err, e.data)
+                    e = {...e, data: hydrate(e.data)}
+                }
+
+                doLogs && console.log(curThreadId, "Hydrated message", e)
+
+                try {
+                    let res: any = undefined
+
+                    if (typeof e.data === 'object' || typeof e.data === 'function') {
+                        if ('__system' in e.data && e.data.__system) {
+                            doLogs && console.log(curThreadId, "Message is a system event!")
+                            if ('share' in e.data && 'shareId' in e.data) {
+                                if ((self as any).onshare) {
+                                    res = (self as any).onshare(this, {share: e.data.share, message: e.data.message})
+                                } else if ((self as any).onevent) {
+                                    doLogs && console.log(curThreadId, "onshare not found, falling back to onevent");
+                                    res = (self as any).onevent(this, e)
+                                }
+
+                                if (promiseLike(res)) {
+                                    await res
+                                }
+                                this.p.postMessage({__system: true, __shared: e.data.shareId})
+                            } else if ('transfer' in e.data) {
+                                if ((self as any).ontransfer) {
+                                    res = (self as any).ontransfer(this, e.data.message)
+                                } else if ((self as any).onevent) {
+                                    doLogs && console.log(curThreadId, "ontransfer not found, falling back to onevent");
+                                    res = (self as any).onevent(this, e)
+                                }
+
+                                if (promiseLike(res)) {
+                                    await res
+                                }
+                                this.p.postMessage({__system: true, __transferd: e.data.transfer})
+                            } else if ('workId' in e.data && 'work' in e.data) {
+                                if ((self as any).onwork) {
+                                    res = (self as any).onwork(this, e.data.work)
+                                } else if ((self as any).onevent) {
+                                    doLogs && console.log(curThreadId, "onwork not found, falling back to onevent");
+                                    res = (self as any).onevent(this, e)
+                                }
+                                if (promiseLike(res)) {
+                                    res = await res
+                                }
+                                this.p.postMessage({
+                                    __system: true,
+                                    threadId: getThreadId(),
+                                    workId: e.data.workId,
+                                    res: res
+                                })
+                            } else if ('threadId' in e.data && 'init' in e.data) {
+                                setThreadId(e.data.threadId)
+                                if ((self as any).oninit) {
+                                    (self as any).oninit(this, e.data.init)
+                                } else {
+                                    doLogs && console.log(curThreadId, "oninit not found, skipping custom initialization");
+                                }
+
+                                if (promiseLike(res)) {
+                                    await res
+                                }
+
+                                if ('closeWhenIdle' in e.data && isFinite(e.data.closeWhenIdle)) {
+                                    doLogs && console.log(curThreadId, "idle timeout found! Creating idle timeout");
+                                    threadIdle = e.data.closeWhenIdle
+                                }
+                                this.p.postMessage({__system: true, __initd: true})
+                                doLogs && console.log(curThreadId, 'Thread ready!')
+                            } else if ('__close' in e.data) {
+                                this.close()
+                            } else {
+                                throw new Error('INVALID SYSTEM EVENT!' + JSON.stringify(e.data))
+                            }
+                        } else if ((self as any).onevent) {
+                            doLogs && console.log(curThreadId, "Message is a custom event!");
+                            const res = (self as any).onevent(this, e)
+                            if (promiseLike(res)) {
+                                await res
+                            }
+                        }
+                    } else if ((self as any).onevent) {
+                        doLogs && console.log(curThreadId, "Message is a custom event!");
+                        const res = (self as any).onevent(this, e)
+                        if (promiseLike(res)) {
+                            await res
+                        }
+                    }
+                } catch (err) {
+                    if (e.data && typeof e.data === 'object' && '__system' in e.data) {
+                        if ('workId' in e.data) {
+                            this.p.postMessage({__system: true, threadId: getThreadId(), workId: e.data.workId, rej: err})
+                        } else if ('transfer' in e.data) {
+                            this.p.postMessage({
+                                __system: true,
+                                threadId: getThreadId(),
+                                __transferd: e.data.transfer,
+                                __error: err
+                            })
+                        } else if ('share' in e.data) {
+                            this.p.postMessage({__system: true, threadId: getThreadId(), __shared: e.data.transfer, rej: err})
+                        } else if ('init' in e.data) {
+                            this.p.postMessage({__system: true, threadId: getThreadId(), __initd: false, __error: err})
+                            this.close()
+                        } else if ('__close' in e.data) {
+                            this.sendError(err)
+                            this.close()
+                        }
+                    } else {
+                        this.sendError(err)
+                    }
+                }
+            } finally {
+                --this.messagesProcessing
+                --messagesProcessing
+                if (messagesProcessing === 0 && threadIdle > 0 && isFinite(threadIdle)) {
+                    threadIdleTimeout = setTimeout(() => this.close(), threadIdle)
+                }
+            }
+        }
+
+        if ((self as any).onconnection) {
+            (self as any).onconnection(this)
+        }
+    }
+
+    /**
+     * Returns the raw, underlying MessagePort object
+     */
+    public port(): MessagePort {
+        return this.p
+    }
+
+    /**
+     * Sends an error to the connected thread
+     * @param err Error to send
+     */
+    public sendError(err: any) {
+        this.p.postMessage({__system: true, __error: err})
+    }
+
+    /**
+     * Sends a message to the connected thread
+     * @param msg Message to send
+     * @param options postMessage options to use
+     */
+    public postMessage(msg: any, options?: any) {
+        this.p.postMessage(msg, options)
+    }
+
+    /**
+     * Transfers ownership of some object to the connected therad
+     * @param message Message to send (should include a way to reference transferred object)
+     * @param items Objects to transfer ownership of
+     */
+    public transfer(message: any, items: any[]) {
+        if (!Array.isArray(items)) {
+            if (!items) {
+                items = []
+            } else {
+                items = [items]
+            }
+        }
+        this.p.postMessage({__system: true, transfer: true, message, items}, {transfer: items})
+    }
+
+    /**
+     * Gets the number of outstanding messages being processed from the connected thread
+     * If you want to know about total messages being processed on the shared thread, then use the global {@link numMessagesProcessing}
+     */
+    public numMessagesProcessing(): number {
+        return this.messagesProcessing
+    }
+
+    /**
+     * Closes the connection and disconnects from the connected thread
+     */
+    public close() {
+        this.closed = true
+        new Promise(async (resolve) => {
+            for (let attempt = 0; attempt < 10; ++attempt) {
+                if (this.numMessagesProcessing() > 0) {
+                    await new Promise(r => setTimeout(r, 100))
+                }
+                else {
+                    break
+                }
+            }
+
+            if (this.numMessagesProcessing() > 0) {
+                console.error('Port not shut down gracefully after 1 second, forcing shutdown')
+            }
+            this.p.close()
+            resolve(null)
+        })
+    }
+}
+
+if (isSharedWorker()) {
+    // SharedWorker scope
+    // no custom close this time, trying to sort live/dead connections is unfeasible
+
+    (self as any).onconnect = (event: MessageEvent) => {
+        // Everything is handled in the connection object
+        // We don't store a reference here, so once all the event handlers are cleaned up the object should be cleaned up too
+        // (unless somebody stores a reference somewhere, then we're in trouble...)
+        new Connection(event.ports[0])
     }
 }

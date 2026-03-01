@@ -6,7 +6,7 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-const {Barrier, ThreadPool, Thread, Mutex, make, ConditionVariable, WaitGroup, Semaphore} = threads
+const {Barrier, ThreadPool, SharedThread, Thread, Mutex, make, ConditionVariable, WaitGroup, Semaphore} = threads
 
 describe('Thread', () => {
     threads.setLogging(true)
@@ -143,6 +143,144 @@ describe('Thread', () => {
         expect(await p).to.equal(99)
         expect(ints.at(0)).to.equal(99)
         thread.close()
+    })
+})
+
+describe('SharedThread', () => {
+    threads.setLogging(true)
+
+    it('is setup', async function () {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        const thread = await SharedThread.connect('shared-worker1.js', {closeWhenIdle: 100})
+        expect(thread).to.not.be.null
+    })
+
+    it('can connect to thread', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        const thread = await SharedThread.connect('shared-worker1.js', {closeWhenIdle: 100})
+        expect(thread).to.not.be.null
+        expect(await thread.sendWork(4)).to.equal(16)
+    })
+
+    it('event handler', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        let resolve
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (v) => {
+            resolve(v.data)
+        }
+        const thread = await SharedThread.connect('shared-worker1.js', {initData: 45, onEventHandler: handler, closeWhenIdle: 100})
+        expect(thread).to.not.be.null
+        expect(await thread.sendWork(4)).to.equal(16)
+        thread.sendEvent(-23)
+        expect(await p).to.equal(45)
+    })
+
+    it('share handler', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        let resolve
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (v) => {
+            resolve(v.data)
+        }
+        const thread = await SharedThread.connect('shared-worker1.js', {initData: 45, onEventHandler: handler, closeWhenIdle: 100})
+        expect(thread).to.not.be.null
+
+        await thread.share(99)
+        expect(await thread.sendWork(4)).to.equal(16)
+        thread.sendEvent(-23)
+
+        // graceful shutdown
+        thread.disconnect()
+
+        // should still be able to await for the response back
+        expect(await p).to.equal(99)
+    })
+
+    it('share handler message', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        let resolve
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (v) => {
+            resolve(v.data)
+        }
+        const thread = await SharedThread.connect('shared-worker1.js', {initData:45, onEventHandler: handler})
+        expect(thread).to.not.be.null
+
+        await thread.share(99, 55)
+        expect(await thread.sendWork(4)).to.equal(16)
+        thread.sendEvent(-23)
+        expect(await p).to.equal(55)
+    })
+
+    it('transfer handler can be called', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        let resolve
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (v) => {
+            resolve(v.data)
+        }
+        const thread = await SharedThread.connect('shared-worker1.js', {initData:45, onEventHandler:handler})
+        expect(thread).to.not.be.null
+
+        await thread.transfer(99, [])
+        expect(await thread.sendWork(4)).to.equal(16)
+        thread.sendEvent(-23)
+        expect(await p).to.equal(99)
+        thread.disconnect()
+    })
+
+    it('transfer handler transfers ownership', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        let resolve
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (v) => {
+            resolve(v.data)
+        }
+        const ab = new ArrayBuffer(64)
+        const ints = new Int32Array(ab)
+        ints.set([99], 0)
+        const thread = await SharedThread.connect('shared-worker2.js', {initData:45, onEventHandler:handler})
+        expect(thread).to.not.be.null
+
+        await thread.transfer(ints, ints.buffer)
+        thread.sendEvent(-23)
+        expect(await p).to.equal(99)
+
+        expect(() => ints.at(0)).to.throw()
+        thread.sever()
+    })
+
+    it('can transfer back', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        let resolve
+        let ints = new Int32Array(new ArrayBuffer(64))
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = ({result, buff}) => {
+            ints = buff
+            console.error('HANDLER')
+            resolve(result)
+        }
+        ints.set([99], 0)
+        const thread = await SharedThread.connect('shared-worker3.js', {initData:45, onTransferHandler: handler})
+        expect(thread).to.not.be.null
+
+        await thread.transfer(ints, ints.buffer)
+        expect(await p).to.equal(99)
+        expect(ints.at(0)).to.equal(99)
+        thread.sever()
     })
 })
 
@@ -363,8 +501,8 @@ describe('Barrier', async function() {
         console.info(this.test.parent.title + '.`' + this.test.title + '`')
         const bar = Barrier.make(3)
         const mem = new Int32Array(new SharedArrayBuffer(64))
-        const thread1 = await Thread.spawn('barrier.js', {initData: {bar, mem}})
-        const thread2 = await Thread.spawn('barrier.js', {initData: {bar, mem}})
+        const thread1 = await Thread.spawn('barrier.js', {initData: {bar, mem}, closeWhenIdle: 500})
+        const thread2 = await Thread.spawn('barrier.js', {initData: {bar, mem}, closeWhenIdle: 500})
 
         thread1.sendWork(1)
         thread2.sendWork(1)
@@ -372,7 +510,6 @@ describe('Barrier', async function() {
         await bar.waitAsync()
 
         expect(mem.at(0)).to.equal(2)
-        thread.close()
     })
 })
 

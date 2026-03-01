@@ -6,6 +6,8 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+import type {Connection} from "./thread.ts";
+
 /**
  * Registers a global handler. Can only be called from a {@link Thread} that is spawned (not from the main thread).
  *
@@ -16,6 +18,43 @@
 export function registerHandler(type: 'init'|'event'|'share'|'transfer'|'work'|'close', handler: (_?: any, _1?: any) => any) {
     if (self) {
         switch (type) {
+            case 'init':
+                (self as any).oninit = handler
+                break
+            case 'event':
+                (self as any).onevent = handler
+                break
+            case 'share':
+                (self as any).onshare = handler
+                break
+            case 'transfer':
+                (self as any).ontransfer = handler
+                break
+            case 'work':
+                (self as any).onwork = handler
+                break
+            case 'close':
+                (self as any).onclose = handler
+                break
+        }
+    } else {
+        throw new Error('registerHandler only usable from worker thread!')
+    }
+}
+
+/**
+ * Registers a global handler. Can only be called from a {@link Thread} that is spawned (not from the main thread).
+ *
+ * @param type Type of handler to register (event = onevent, init = oninit, share = onshare, etc.)
+ * @param handler Handler function to register (takes an additional {@link Connection} parameter for the first argument)
+ */
+export function registerSharedHandler(type: 'init'|'event'|'share'|'transfer'|'work'|'close'|'connect'|'connection', handler: (conn: Connection, _?: any, _1?: any) => any) {
+    if (self) {
+        switch (type) {
+            case 'connection':
+            case 'connect':
+                (self as any).onconnection = handler
+                break
             case 'init':
                 (self as any).oninit = handler
                 break

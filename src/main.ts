@@ -11,8 +11,23 @@ export {WaitGroup, type DehydratedWaitGroup} from "./waitGroup.ts";
 export {Barrier, type DehydratedBarrier} from "./barrier.ts";
 export {ConditionVariable, type DehydratedConditionVariable} from "./conditionVariable.ts";
 export {Semaphore, type DehydratedSemaphore} from "./semaphore.ts";
-export {Thread, setLogging, registerDeHydration, numMessagesProcessing, sendError, curThread, transfer, type DehydrationClass, type DehydrationFunctions, type ThreadOptions} from './thread.ts';
+export {
+    Thread,
+    setLogging,
+    registerDeHydration,
+    numMessagesProcessing,
+    sendError,
+    curThread,
+    transfer,
+    isDedicatedWorker,
+    isSharedWorker,
+    SharedThread,
+    Connection,
+    type DehydrationClass,
+    type DehydrationFunctions,
+    type ThreadOptions
+} from './thread.ts';
 export {ThreadPool, type ThreadPoolOptions} from './threadPool.ts';
 export {Address, make, type DehydratedAddress} from './memory.ts';
 export {type ElementLayoutItem, type ElementLayout, type TypedArray, type BigIntTypedArray} from './types.ts'
-export {registerHandler} from './registerHandler.ts'
+export {registerHandler, registerSharedHandler} from './registerHandler.ts'
