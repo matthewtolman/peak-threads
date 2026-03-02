@@ -12,6 +12,7 @@ import {Address} from "./memory.ts";
 import {WaitGroup} from "./waitGroup.ts";
 import {Barrier} from "./barrier.ts";
 import {Semaphore} from "./semaphore.ts";
+import type {StructuredSerializeOptions} from "node:worker_threads";
 
 let curThreadId = 'main'
 let incThreadId = 0
@@ -645,9 +646,10 @@ export class Thread {
     /**
      * Sends some piece of work off to a thread and returns a promise waiting for a response
      * @param work The work to send to the thread (passed to your `onwork` handler)
+     * @param options Options for sending an event (e.g. transfer data)
      * @return Promise with the result object from doing the work
      */
-    public sendWork<R = any>(work: any): Promise<R> {
+    public sendWork<R = any>(work: any, options?: StructuredSerializeOptions): Promise<R> {
         if (this.killed) {
             throw new Error("Invalid Operation! Thread is stopped!")
         }
@@ -656,7 +658,7 @@ export class Thread {
         ++this.pending
         const promise = new Promise((res, rej) => {
             this.workQueue[workId] = {res, rej}
-            this.worker.postMessage({__system: true, workId, work})
+            this.worker.postMessage({__system: true, workId, work}, options)
         })
         return promise as Promise<R>
     }
@@ -698,9 +700,10 @@ export class Thread {
      * Often used when needing to pass synchronization primitives outside the initialization method
      * @param item Item (or an array of items) that will be shared
      * @param message Any additional message information to pass along
+     * @param options Options for postMessage
      * @return A promise for when the share is complete (important to await the promise before using shared memory in any thread to avoid potential race conditions).
      */
-    public share(item: any, message: any = undefined): Promise<void> {
+    public share(item: any, message?: any, options?: StructuredSerializeOptions): Promise<void> {
         if (this.killed) {
             throw new Error("Invalid Operation! Thread is stopped!")
         }
@@ -712,9 +715,9 @@ export class Thread {
         })
         doLogs && console.log(curThreadId, `Sharing item with thread ${this.threadId}`, item, message)
         if (typeof message != 'undefined') {
-            this.worker.postMessage({__system: true, shareId, share: item, message})
+            this.worker.postMessage({__system: true, shareId, share: item, message}, options)
         } else {
-            this.worker.postMessage({__system: true, shareId, share: item})
+            this.worker.postMessage({__system: true, shareId, share: item}, options)
         }
         return promise as Promise<void>
     }
@@ -1022,9 +1025,10 @@ export class SharedThread {
     /**
      * Sends some piece of work off to a thread and returns a promise waiting for a response
      * @param work The work to send to the thread (passed to your `onwork` handler)
+     * @param options Options for the postMessage method
      * @return Promise with the result object from doing the work
      */
-    public sendWork<R = any>(work: any): Promise<R> {
+    public sendWork<R = any>(work: any, options?: StructuredSerializeOptions): Promise<R> {
         if (this.disconnected) {
             throw new Error("Invalid Operation! Thread is stopped!")
         }
@@ -1033,7 +1037,7 @@ export class SharedThread {
         ++this.pending
         const promise = new Promise((res, rej) => {
             this.workQueue[workId] = {res, rej}
-            this.worker.port.postMessage({__system: true, workId, work})
+            this.worker.port.postMessage({__system: true, workId, work}, options)
         })
         return promise as Promise<R>
     }
@@ -1082,9 +1086,10 @@ export class SharedThread {
      * Often used when needing to pass synchronization primitives outside the initialization method
      * @param item Item (or an array of items) that will be shared
      * @param message Any additional message information to pass along
+     * @param options Options for postMessage
      * @return A promise for when the share is complete (important to await the promise before using shared memory in any thread to avoid potential race conditions).
      */
-    public share(item: any, message: any = undefined): Promise<void> {
+    public share(item: any, message?: any, options?: StructuredSerializeOptions): Promise<void> {
         if (this.disconnected) {
             throw new Error("Invalid Operation! Thread is stopped!")
         }
@@ -1096,9 +1101,9 @@ export class SharedThread {
         })
         doLogs && console.log(curThreadId, `Sharing item with thread ${this.script}`, item, message)
         if (typeof message != 'undefined') {
-            this.worker.port.postMessage({__system: true, shareId, share: item, message})
+            this.worker.port.postMessage({__system: true, shareId, share: item, message}, options)
         } else {
-            this.worker.port.postMessage({__system: true, shareId, share: item})
+            this.worker.port.postMessage({__system: true, shareId, share: item}, options)
         }
         return promise as Promise<void>
     }
@@ -1212,7 +1217,37 @@ export function curThread(): string {
 }
 
 /**
- * Transfers ownership of a resource to the parent thread
+ * Represents that a response should be returned with a transfer option set
+ * This only has meaning when returned from `onwork` (or an `onevent` that is called for work when `onwork` is not defined).
+ * Returning from any other handler or using from the main thread is not meaningful
+ */
+export class ResponseWithTransfer<T> {
+    public message: T
+    public transfer: any[]
+
+    constructor(message: T, transfer: any[]) {
+        this.message = message
+        this.transfer = transfer
+    }
+}
+
+/**
+ * Represents that a response should be returned with a transfer option set
+ * This only has meaning when returned from `onwork` (or an `onevent` that is called for work when `onwork` is not defined).
+ * Returning from any other handler or using from the main thread is not meaningful
+ */
+export class ResponseWithOptions<T> {
+    public message: T
+    public options: WindowPostMessageOptions
+
+    constructor(message: T, options: WindowPostMessageOptions) {
+        this.message = message
+        this.options = options
+    }
+}
+
+/**
+ * Transfers ownership of a resource to the parent thread.
  *
  * **ONLY USABLE FROM CHILD THREADS!**
  *
@@ -1380,12 +1415,31 @@ if (isDedicatedWorker()) {
                             if (promiseLike(res)) {
                                 res = await res
                             }
-                            postMessage({
-                                __system: true,
-                                threadId: getThreadId(),
-                                workId: e.data.workId,
-                                res: res
-                            })
+
+                            if (res instanceof ResponseWithTransfer) {
+                                postMessage({
+                                    __system: true,
+                                    threadId: getThreadId(),
+                                    workId: e.data.workId,
+                                    res: res.message,
+                                }, {transfer: res.transfer})
+                            }
+                            else if (res instanceof ResponseWithOptions) {
+                                postMessage({
+                                    __system: true,
+                                    threadId: getThreadId(),
+                                    workId: e.data.workId,
+                                    res: res.message,
+                                }, res.options)
+                            }
+                            else {
+                                postMessage({
+                                    __system: true,
+                                    threadId: getThreadId(),
+                                    workId: e.data.workId,
+                                    res: res
+                                })
+                            }
                         } else if ('threadId' in e.data && 'init' in e.data) {
                             setThreadId(e.data.threadId)
                             if ((self as any).oninit) {
@@ -1552,12 +1606,31 @@ export class Connection {
                                 if (promiseLike(res)) {
                                     res = await res
                                 }
-                                this.p.postMessage({
-                                    __system: true,
-                                    threadId: getThreadId(),
-                                    workId: e.data.workId,
-                                    res: res
-                                })
+
+                                if (res instanceof ResponseWithTransfer) {
+                                    this.p.postMessage({
+                                        __system: true,
+                                        threadId: getThreadId(),
+                                        workId: e.data.workId,
+                                        res: res.message,
+                                    }, {transfer: res.transfer})
+                                }
+                                else if (res instanceof ResponseWithOptions) {
+                                    this.p.postMessage({
+                                        __system: true,
+                                        threadId: getThreadId(),
+                                        workId: e.data.workId,
+                                        res: res.message,
+                                    }, res.options)
+                                }
+                                else {
+                                    this.p.postMessage({
+                                        __system: true,
+                                        threadId: getThreadId(),
+                                        workId: e.data.workId,
+                                        res: res
+                                    })
+                                }
                             } else if ('threadId' in e.data && 'init' in e.data) {
                                 setThreadId(e.data.threadId)
                                 if ((self as any).oninit) {

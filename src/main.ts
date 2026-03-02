@@ -25,7 +25,9 @@ export {
     Connection,
     type DehydrationClass,
     type DehydrationFunctions,
-    type ThreadOptions
+    type ThreadOptions,
+    ResponseWithTransfer,
+    ResponseWithOptions,
 } from './thread.ts';
 export {ThreadPool, type ThreadPoolOptions} from './threadPool.ts';
 export {Address, make, type DehydratedAddress} from './memory.ts';
