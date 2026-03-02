@@ -1,7 +1,7 @@
 {
   "name": "peak-threads",
   "private": false,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "homepage": "https://peak-threads.matthewtolman.dev",
   "license": "MPL-2.0",
@@ -15,7 +15,14 @@
     "url": "https://git.matthewtolman.dev/mtolman/peak-threads"
   },
   "description": "Simplifying threading in the browser and implementing missing synchronization primitives as well",
-  "keywords": ["threads", "workers", "Worker", "shared memory", "mutex", "lock"],
+  "keywords": [
+    "threads",
+    "workers",
+    "Worker",
+    "shared memory",
+    "mutex",
+    "lock"
+  ],
   "exports": {
     ".": {
       "types": "./dist/threads.d.ts",
