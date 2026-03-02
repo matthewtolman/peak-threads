@@ -261,8 +261,9 @@ export class ThreadPool {
     /**
      * Sends a job to the thread pool to be scheduled. May grow the pool if needed.
      * @param work Work to send
+     * @param options Options for postMessage (be careful when transferring ownership! If a thread dies you may not be able to recover the transferred data!)
      */
-    public async sendWork(work: any) {
+    public async sendWork(work: any, options?: StructuredSerializeOptions) {
         const maxAttempts = this.options?.queueRetries || 5
         for (let i = 0; i < maxAttempts; ++i) {
             if (this.closed) {
@@ -275,7 +276,7 @@ export class ThreadPool {
 
             // we only retry if sending the work failed (usually happens when we send to a dead thread)
             try {
-                return await thread.sendWork(work)
+                return await thread.sendWork(work, options)
             } catch (e: any) {
                 if (e && e.message && typeof e.message === 'string' && (e.message === "Thread stopped running!" || e.message === 'Thread is shutting down!')) {
                     // wait for threads to clean up and try again

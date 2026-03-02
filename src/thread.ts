@@ -12,7 +12,6 @@ import {Address} from "./memory.ts";
 import {WaitGroup} from "./waitGroup.ts";
 import {Barrier} from "./barrier.ts";
 import {Semaphore} from "./semaphore.ts";
-import type {StructuredSerializeOptions} from "node:worker_threads";
 
 let curThreadId = 'main'
 let incThreadId = 0
