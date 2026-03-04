@@ -335,11 +335,11 @@ async function spawn() {
     const thread = await Thread.spawn('worker.js', {initData: {secret: mysecret}})
     const pool = await ThreadPool.spawn('worker.js', {initData: {secret: mysecret}})
     
-    console.log(thread.sendWork('guess1'))
-    console.log(pool.sendWork('guess2'))
+    console.log(await thread.sendWork('guess1'))
+    console.log(await pool.sendWork('guess2'))
         
-    console.log(thread.sendWork('super-secret'))
-    console.log(pool.sendWork('super-secret'))
+    console.log(await thread.sendWork('super-secret'))
+    console.log(await pool.sendWork('super-secret'))
 }
 ```
 
@@ -357,6 +357,48 @@ registerHandler('init', ({secret}) => {
 })
 
 registerHandler('work', (guess) => guess === secretWord)
+```
+
+## Working with Transferrables
+
+To send work with large ArrayBuffers, it's often faster (and less stuttery) to transfer the buffer rather than copy it.
+This can be done on the sender side by passing an extra "transfer" option to `sendWork`.
+
+```javascript
+// main.js
+import {Thread, ThreadPool} from 'peaks-threads'
+const mysecret = 'super-secret'
+
+async function spawn() {
+    const thread = await Thread.spawn('worker.js')
+    
+    let arr = new Int32Array(new ArrayBuffer(5 * 1024 * 1024)) // 5MB
+    
+    // Do something with arr (e.g. copy image data into it)
+
+    // transfer it over to the worker
+    // once transferred, we can't use the original array or buffer
+    // so they'll have to send us back a buffer and we reacreate the array
+    arr = new Int32Array(await thread.sendWork({buff: arr.buffer}, {transfer: arr.buffer}))
+    
+    // do something else
+}
+```
+
+On the worker side, we have to change our return value slightly to indicate we want to transfer a buffer back to the main thread.
+Instead of just returning our answer, we wrap it in a `ResponseWithTransfer` object and designate what we're transferring
+ownership of.
+
+```javascript
+import {ResponseWithTransfer, registerHandler} from "peak-threads";
+
+registerHandler('work', ({buff}) => {
+    
+    // do something with buff...
+    
+    // transfer it back
+    return ResponseWithTransfer({buff}, [buff])
+})
 ```
 
 ## Advanced Usage
@@ -446,10 +488,10 @@ registerHandler('event', (event) => {
 })
 ```
 
-### Transfering objects to workers
+### Transfer with no response
 
-Some objects, like array buffers, are really large and expensive to send across. Web APIs provide a way to "transfer" the underlying data.
-We can use this to our advantage and transfer large objects to the worker thread using the `transfer` method.
+There is not a way to "transfer" objects as part of our initializer.
+If you need to transfer an object, but not get a response back, then we can use the `transfer` method.
 To receive transferred objects, the underlying thread will register the `ontransfer` handler.
 
 ```javascript
@@ -461,9 +503,9 @@ async function transferExample() {
     ints.set([99], 0) // set some data
     const thread = await Thread.spawn('worker.js')
     
-    // Send the int view over and transfer the underlying buffer
+    // Send the int buffer over directly (faster for large buffers)
     // After this line, the main thread can **never** use it again!
-    await thread.transfer(ints, [ints.buffer])
+    await thread.transfer(ints.buffer, [ints.buffer])
 }
 ```
 
@@ -476,16 +518,16 @@ import {registerHandler} from 'peaks-threads'
 // The transferred data (second param) is just instructions for the browser on how to manipulate memory
 // Onlyl the "message" (first param) is available for the handler
 ontransfer = (intView) => {
-    console.log(intView.at(0))
+    console.log(new Int32Array(intView).at(0))
 }
 
 // alternative
 registerHandler('transfer', (intView) => {
-    console.log(intView.at(0))
+    console.log(new Int32Array(intView).at(0))
 })
 ```
 
-### Transferring objects back
+### One-time transfer from child thread
 
 To transfer objects back, use the global `self.transfer` method from the worker (or just `transfer` for short).
 To receive a transferred object in the main thread, set the `onTransferHandler` in the spawn method
@@ -494,7 +536,7 @@ To receive a transferred object in the main thread, set the `onTransferHandler` 
 // main.js
 async function transferExample() {
     const handler = (buff) => {
-        console.log(buff.at(0))
+        console.log(new Int32Array(buff).at(0))
     }
     const thread = await Thread.spawn('worker3.js', {initData:45, onTransferHandler: handler})
 }
@@ -511,7 +553,7 @@ oninit = (intView) => {
     let ints = new Int32Array(new ArrayBuffer(64))
     ints.set([99], 0)
     // if a non-array item is passed as the second parameter, it will be wrapped in an array
-    transfer(ints, ints.buffer)
+    transfer(ints.buffer, ints.buffer)
 }
 
 // alternative
@@ -522,7 +564,7 @@ registerHandler('init', (intView) => {
     let ints = new Int32Array(new ArrayBuffer(64))
     ints.set([99], 0)
     // if a non-array item is passed as the second parameter, it will be wrapped in an array
-    transfer(ints, ints.buffer)
+    transfer(ints.buffer, ints.buffer)
 })
 ```
 
