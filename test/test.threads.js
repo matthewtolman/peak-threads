@@ -115,7 +115,59 @@ describe('Thread', () => {
         const thread = await Thread.spawn('worker2.js', {initData:45, onEventHandler:handler})
         expect(thread).to.not.be.null
 
+        expect(ints.buffer.detached).to.equal(false)
         await thread.transfer(ints, ints.buffer)
+        expect(ints.buffer.detached).to.equal(true)
+        thread.sendEvent(-23)
+        expect(await p).to.equal(99)
+
+        expect(() => ints.at(0)).to.throw()
+        thread.kill()
+    })
+
+    it('transfer handler transfers ownership - nested', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        let resolve
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (v) => {
+            resolve(v.data)
+        }
+        const ab = new ArrayBuffer(64)
+        const ints = new Int32Array(ab)
+        ints.set([99], 0)
+        const thread = await Thread.spawn('worker4.js', {initData:45, onEventHandler:handler})
+        expect(thread).to.not.be.null
+
+        expect(ints.buffer.detached).to.equal(false)
+        await thread.transfer({i: ints}, () => [ints.buffer])
+        expect(ints.buffer.detached).to.equal(true)
+        thread.sendEvent(-23)
+        expect(await p).to.equal(99)
+
+        expect(() => ints.at(0)).to.throw()
+        thread.kill()
+    })
+
+    it('transfer handler transfers ownership - method', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        let resolve
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (v) => {
+            resolve(v.data)
+        }
+        const ab = new ArrayBuffer(64)
+        const ints = new Int32Array(ab)
+        ints.set([99], 0)
+        const thread = await Thread.spawn('worker2.js', {initData:45, onEventHandler:handler})
+        expect(thread).to.not.be.null
+
+        expect(ints.buffer.detached).to.equal(false)
+        await thread.transfer(ints, () => [ints.buffer])
+        expect(ints.buffer.detached).to.equal(true)
         thread.sendEvent(-23)
         expect(await p).to.equal(99)
 
@@ -253,7 +305,34 @@ describe('SharedThread', () => {
         const thread = await SharedThread.connect('shared-worker2.js', {initData:45, onEventHandler:handler})
         expect(thread).to.not.be.null
 
+        expect(ints.buffer.detached).to.equal(false)
         await thread.transfer(ints, ints.buffer)
+        expect(ints.buffer.detached).to.equal(true)
+        thread.sendEvent(-23)
+        expect(await p).to.equal(99)
+
+        expect(() => ints.at(0)).to.throw()
+        thread.sever()
+    })
+
+    it('transfer handler transfers ownership - method', async function() {
+        console.info(this.test.parent.title + '.`' + this.test.title + '`')
+        let resolve
+        const p = new Promise((res) => {
+            resolve = res
+        })
+        const handler = (v) => {
+            resolve(v.data)
+        }
+        const ab = new ArrayBuffer(64)
+        const ints = new Int32Array(ab)
+        ints.set([99], 0)
+        const thread = await SharedThread.connect('shared-worker2.js', {initData:45, onEventHandler:handler})
+        expect(thread).to.not.be.null
+
+        expect(ints.buffer.detached).to.equal(false)
+        await thread.transfer(ints, () => ints.buffer)
+        expect(ints.buffer.detached).to.equal(true)
         thread.sendEvent(-23)
         expect(await p).to.equal(99)
 

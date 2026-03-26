@@ -57,6 +57,13 @@ export interface DehydrationClass {
     type: any
 }
 
+export type TransferableFunction = ((dehydrated: any) => Transferable|Transferable[]);
+
+/**
+ * Represents a way to get a transferable object pre or post dehydration
+ */
+export type TransferableFetchers = Array<Transferable|TransferableFunction>;
+
 /**
  * Definition of a function-based dehydration registration where the dehydration information is cleaned from functions.
  * Three functions need to be defined: `isa`, `hydrate`, `dehydrate`. All of these must be synchronous.
@@ -155,9 +162,20 @@ export function registerDeHydration(ruleset: DehydrationFunctions | DehydrationC
     dehydrationList.push(ruleset)
 }
 
+function isTransferable(o: any): o is Transferable {
+    try {
+        return o instanceof ArrayBuffer || o instanceof MessagePort || o instanceof ImageBitmap || o instanceof OffscreenCanvas
+    }
+    catch {
+        return false
+    }
+}
+
 function dehydrate(obj: any): any {
     if (obj && Array.isArray(obj)) {
         return obj.map(dehydrate)
+    } else if (isTransferable(obj)) {
+        return obj
     } else if (typeof obj === 'object' && obj) {
         const v: any = {
             __dehydrated: true,
@@ -199,6 +217,10 @@ function dehydrate(obj: any): any {
                 }
             }
             for (const k of Object.keys(obj)) {
+                // don't touch transferable objects since that breaks our transfer array
+                if (isTransferable(obj[k])) {
+                    continue
+                }
                 obj[k] = dehydrate(obj[k])
             }
             return obj
@@ -446,11 +468,32 @@ export class Thread {
         this.worker = new Worker(script, workerOpts)
 
         const oldPostMessage = this.worker.postMessage.bind(this.worker)
-        this.worker.postMessage = (function (message: any, ...args: any[]) {
+        this.worker.postMessage = (function (message: any, options?: ResponseOptions) {
             doLogs && console.log(curThreadId, 'Sending message to ' + threadId, message)
             message = dehydrate(message)
             doLogs && console.log(curThreadId, 'Dehydrated message to ' + threadId, message)
-            return oldPostMessage(message, ...args)
+
+            if (options && options.transfer) {
+                for (let i = 0; i < options.transfer.length; ++i) {
+                    if (isTransferable(options.transfer[i])) {
+                        continue
+                    }
+
+                    const func = options.transfer[i] as TransferableFunction
+                    let t = func(message)
+                    if (!Array.isArray(t)) {
+                        options.transfer.splice(i, 1, t)
+                    }
+                    else {
+                        options.transfer.splice(i, 1, ...t)
+                    }
+                }
+                if (options.transfer.length && doLogs) {
+                    console.log(curThreadId, 'Transferring several items over, memory will no longer be owned')
+                }
+            }
+
+            return oldPostMessage(message, options as any)
         } as any).bind(this.worker)
 
         this.worker.postMessage({
@@ -744,7 +787,7 @@ export class Thread {
             this.workQueue[transferId] = {res, rej}
         })
         doLogs && console.log(curThreadId, `Transferring items to thread ${this.threadId}`, items, message)
-        this.worker.postMessage({__system: true, transfer: transferId, message, items}, {transfer: items})
+        this.worker.postMessage({__system: true, transfer: transferId, message}, {transfer: items})
         return promise as Promise<void>
     }
 
@@ -847,11 +890,31 @@ export class SharedThread {
         this.worker.port.start()
 
         const oldPostMessage = this.worker.port.postMessage.bind(this.worker.port)
-        this.worker.port.postMessage = (function (message: any, ...args: any[]) {
+        this.worker.port.postMessage = (function (message: any, options?: ResponseOptions) {
             doLogs && console.log(curThreadId, 'Sending message to shared thread ' + script, message)
             message = dehydrate(message)
             doLogs && console.log(curThreadId, 'Dehydrated message to shared thread ' + script, message)
-            return oldPostMessage(message, ...args)
+
+            if (options && options.transfer) {
+                for (let i = 0; i < options.transfer.length; ++i) {
+                    if (isTransferable(options.transfer[i])) {
+                        continue
+                    }
+
+                    const func = options.transfer[i] as TransferableFunction
+                    let t = func(message)
+                    if (!Array.isArray(t)) {
+                        options.transfer.splice(i, 1, t)
+                    }
+                    else {
+                        options.transfer.splice(i, 1, ...t)
+                    }
+                }
+                if (options.transfer.length && doLogs) {
+                    console.log(curThreadId, 'Transferring several items over, memory will no longer be owned')
+                }
+            }
+            return oldPostMessage(message, options as any)
         } as any).bind(this.worker.port)
 
         this.worker.port.postMessage({
@@ -1027,7 +1090,7 @@ export class SharedThread {
      * @param options Options for the postMessage method
      * @return Promise with the result object from doing the work
      */
-    public sendWork<R = any>(work: any, options?: StructuredSerializeOptions): Promise<R> {
+    public sendWork<R = any>(work: any, options?: StructuredSerializeOptions|ResponseOptions): Promise<R> {
         if (this.disconnected) {
             throw new Error("Invalid Operation! Thread is stopped!")
         }
@@ -1112,7 +1175,7 @@ export class SharedThread {
      * @param message Message to send indicating transfer information (should contain how the transferred object is accessed, like the TypedArray)
      * @param items The items to transfer ownership of (often an underlying piece of the accessed objects, liek the TypedArray's buffer)
      */
-    public transfer(message: any, items: any[]): Promise<void> {
+    public transfer(message: any, items: Transferable|TransferableFetchers): Promise<void> {
         if (this.disconnected) {
             throw new Error("Invalid Operation! Thread is stopped!")
         }
@@ -1130,7 +1193,7 @@ export class SharedThread {
             this.workQueue[transferId] = {res, rej}
         })
         doLogs && console.log(curThreadId, `Transferring items to thread ${this.script}`, items, message)
-        this.worker.port.postMessage({__system: true, transfer: transferId, message, items}, {transfer: items})
+        this.worker.port.postMessage({__system: true, transfer: transferId, message}, {transfer: items} as any)
         return promise as Promise<void>
     }
 
@@ -1222,12 +1285,22 @@ export function curThread(): string {
  */
 export class ResponseWithTransfer<T> {
     public message: T
-    public transfer: any[]
+    public transfer: TransferableFetchers
 
-    constructor(message: T, transfer: any[]) {
+    constructor(message: T, transfer: TransferableFetchers) {
         this.message = message
         this.transfer = transfer
     }
+}
+
+/**
+ * Represents that a response should be returned with any options set
+ * This only has meaning when returned from `onwork` (or an `onevent` that is called for work when `onwork` is not defined).
+ * Returning from any other handler or using from the main thread is not meaningful
+ */
+export interface ResponseOptions {
+    transfer?: TransferableFetchers
+    targetOrigin?: string;
 }
 
 /**
@@ -1237,9 +1310,9 @@ export class ResponseWithTransfer<T> {
  */
 export class ResponseWithOptions<T> {
     public message: T
-    public options: WindowPostMessageOptions
+    public options: ResponseOptions
 
-    constructor(message: T, options: WindowPostMessageOptions) {
+    constructor(message: T, options: ResponseOptions) {
         this.message = message
         this.options = options
     }
@@ -1253,7 +1326,7 @@ export class ResponseWithOptions<T> {
  * @param message Message for the transfer (usually includes how to access the transferred resource)
  * @param items Memory ownership to transfer
  */
-export function transfer(message: any, items: any[]) {
+export function transfer(message: any, items: Transferable|TransferableFetchers) {
     if (self && !(self as any).onconnect) {
         if (!Array.isArray(items)) {
             if (!items) {
@@ -1262,7 +1335,7 @@ export function transfer(message: any, items: any[]) {
                 items = [items]
             }
         }
-        postMessage({__system: true, transfer: true, message, items}, {transfer: items})
+        postMessage({__system: true, transfer: true, message}, {transfer: items} as any)
     } else {
         throw new Error('transfer only usable from worker thread!')
     }
@@ -1734,7 +1807,7 @@ export class Connection {
      * @param message Message to send (should include a way to reference transferred object)
      * @param items Objects to transfer ownership of
      */
-    public transfer(message: any, items: any[]) {
+    public transfer(message: any, items: Transferable|TransferableFetchers) {
         if (!Array.isArray(items)) {
             if (!items) {
                 items = []
@@ -1742,7 +1815,7 @@ export class Connection {
                 items = [items]
             }
         }
-        this.p.postMessage({__system: true, transfer: true, message, items}, {transfer: items})
+        this.p.postMessage({__system: true, transfer: true, message}, {transfer: items} as any)
     }
 
     /**
