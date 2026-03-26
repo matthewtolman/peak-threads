@@ -57,6 +57,9 @@ export interface DehydrationClass {
     type: any
 }
 
+/**
+ * Function that takes a dehydrated object and returns an item (or items) to transfer
+ */
 export type TransferableFunction = ((dehydrated: any) => Transferable|Transferable[]);
 
 /**
@@ -162,7 +165,11 @@ export function registerDeHydration(ruleset: DehydrationFunctions | DehydrationC
     dehydrationList.push(ruleset)
 }
 
-function isTransferable(o: any): o is Transferable {
+/**
+ * Checks if an object is transferable or not
+ * @param o
+ */
+export function isTransferable(o: any): o is Transferable {
     try {
         return o instanceof ArrayBuffer || o instanceof MessagePort || o instanceof ImageBitmap || o instanceof OffscreenCanvas
     }
@@ -488,7 +495,7 @@ export class Thread {
                         options.transfer.splice(i, 1, ...t)
                     }
                 }
-                if (options.transfer.length && doLogs) {
+                if (doLogs && options.transfer.length) {
                     console.log(curThreadId, 'Transferring several items over, memory will no longer be owned')
                 }
             }
@@ -910,7 +917,7 @@ export class SharedThread {
                         options.transfer.splice(i, 1, ...t)
                     }
                 }
-                if (options.transfer.length && doLogs) {
+                if (doLogs && options.transfer.length) {
                     console.log(curThreadId, 'Transferring several items over, memory will no longer be owned')
                 }
             }

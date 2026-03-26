@@ -28,6 +28,9 @@ export {
     type ThreadOptions,
     ResponseWithTransfer,
     ResponseWithOptions,
+    isTransferable,
+    type TransferableFunction,
+    type TransferableFetchers,
 } from './thread.ts';
 export {ThreadPool, type ThreadPoolOptions} from './threadPool.ts';
 export {Address, make, type DehydratedAddress} from './memory.ts';
