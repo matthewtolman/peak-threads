@@ -6,15 +6,15 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-importScripts("/dist/threads.iife.js")
-threads.setLogging(true)
+importScripts("/dist/threads.iife.js");
+threads.setLogging(true);
 
-let arrBuff = new Int32Array(new ArrayBuffer(4))
+let arrBuff = new Int32Array(new ArrayBuffer(4));
 
-self.ontransfer = ({i}) => {
-    arrBuff = i
-}
+self.ontransfer = ({ i }) => {
+  arrBuff = i;
+};
 
 self.onevent = async (e) => {
-    postMessage(arrBuff.at(0))
-}
+  postMessage(arrBuff.at(0));
+};

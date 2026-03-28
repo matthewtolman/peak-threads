@@ -6,17 +6,17 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-import {Mutex} from "./mutex.ts";
-import {ConditionVariable} from "./conditionVariable.ts";
-import {Address} from "./memory.ts";
-import {WaitGroup} from "./waitGroup.ts";
-import {Barrier} from "./barrier.ts";
-import {Semaphore} from "./semaphore.ts";
+import { Mutex } from "./mutex.ts";
+import { ConditionVariable } from "./conditionVariable.ts";
+import { Address } from "./memory.ts";
+import { WaitGroup } from "./waitGroup.ts";
+import { Barrier } from "./barrier.ts";
+import { Semaphore } from "./semaphore.ts";
 
-let curThreadId = 'main'
-let incThreadId = 0
+let curThreadId = "main";
+let incThreadId = 0;
 
-let doLogs = false
+let doLogs = false;
 
 /**
  * Sets whether the built-in debug logs should be turned on or not. Must be turned on per-thread (including the main thread).
@@ -30,7 +30,7 @@ let doLogs = false
  * @param logging Set to `true` to turn on logs, `false` to turn off (off by default)
  */
 export function setLogging(logging: boolean) {
-    doLogs = logging
+  doLogs = logging;
 }
 
 /**
@@ -47,25 +47,27 @@ export function setLogging(logging: boolean) {
  * See also {@link DehydrationFunctions}, {@link registerDeHydration}
  */
 export interface DehydrationClass {
-    /**
-     * The key by which the dehydrated object will be identified when hydrating. MUST BE UNIQUE
-     */
-    key: string,
-    /**
-     * The class type (e.g. for the class "Mutex" this would be `Mutex`)
-     */
-    type: any
+  /**
+   * The key by which the dehydrated object will be identified when hydrating. MUST BE UNIQUE
+   */
+  key: string;
+  /**
+   * The class type (e.g. for the class "Mutex" this would be `Mutex`)
+   */
+  type: any;
 }
 
 /**
  * Function that takes a dehydrated object and returns an item (or items) to transfer
  */
-export type TransferableFunction = ((dehydrated: any) => Transferable|Transferable[]);
+export type TransferableFunction = (
+  dehydrated: any,
+) => Transferable | Transferable[];
 
 /**
  * Represents a way to get a transferable object pre or post dehydration
  */
-export type TransferableFetchers = Array<Transferable|TransferableFunction>;
+export type TransferableFetchers = Array<Transferable | TransferableFunction>;
 
 /**
  * Definition of a function-based dehydration registration where the dehydration information is cleaned from functions.
@@ -77,63 +79,68 @@ export type TransferableFetchers = Array<Transferable|TransferableFunction>;
  * See also {@link DehydrationClass}, {@link registerDeHydration}
  */
 export interface DehydrationFunctions {
-    /**
-     * The key by which the dehydrated object will be identified when hydrating. MUST BE UNIQUE
-     */
-    key: string,
-    /**
-     * Function to determine if this dehydration mechanism applies to a value. Return true if it does, false otherwise
-     * @param _object
-     */
-    isa: (object: any) => boolean,
-    /**
-     * Function to perform the dehydration of an object. Return the dehydrated form which can be passed as a message.
-     *
-     * Note: This MUST be synchronous and cannot be a Promise!
-     * @param _object Object to dehydrate
-     */
-    dehydrate: (object: any) => any,
+  /**
+   * The key by which the dehydrated object will be identified when hydrating. MUST BE UNIQUE
+   */
+  key: string;
+  /**
+   * Function to determine if this dehydration mechanism applies to a value. Return true if it does, false otherwise
+   * @param _object
+   */
+  isa: (object: any) => boolean;
+  /**
+   * Function to perform the dehydration of an object. Return the dehydrated form which can be passed as a message.
+   *
+   * Note: This MUST be synchronous and cannot be a Promise!
+   * @param _object Object to dehydrate
+   */
+  dehydrate: (object: any) => any;
 
-    /**
-     * Take a dehydrated form, and turn it back into the original value (as closely as possible)
-     * @param _value Dehydrated value
-     * @param _type The key for the dehydrated value (allows reusing a hydrate function across multiple registrations)
-     */
-    hydrate: (value: any, type?: string) => any,
+  /**
+   * Take a dehydrated form, and turn it back into the original value (as closely as possible)
+   * @param _value Dehydrated value
+   * @param _type The key for the dehydrated value (allows reusing a hydrate function across multiple registrations)
+   */
+  hydrate: (value: any, type?: string) => any;
 }
 
 const dehydrationKeys: Set<string> = new Set<string>([
-    Address.HYDRATION_KEY,
-    Mutex.HYDRATION_KEY,
-    ConditionVariable.HYDRATION_KEY,
-    WaitGroup.HYDRATION_KEY,
-    Barrier.HYDRATION_KEY,
-    Semaphore.HYDRATION_KEY,
-    '__ERROR',
-])
+  Address.HYDRATION_KEY,
+  Mutex.HYDRATION_KEY,
+  ConditionVariable.HYDRATION_KEY,
+  WaitGroup.HYDRATION_KEY,
+  Barrier.HYDRATION_KEY,
+  Semaphore.HYDRATION_KEY,
+  "__ERROR",
+]);
 const dehydrationList: Array<DehydrationClass | DehydrationFunctions> = [
-    {
-        key: '__ERROR',
-        isa: object => {
-            return object instanceof Error
-        },
-        dehydrate: (object: Error) => {
-            return {
-                name: object.name,
-                stack: object.stack,
-                message: object.message,
-                cause: dehydrate(object.cause)
-            }
-        },
-        hydrate: (value: { name: string, stack: string, message: string, cause: unknown | undefined }) => {
-            console.error(value)
-            let e = new Error(value.message, {cause: value.cause})
-            e.stack = value.stack
-            console.error(e)
-            return e
-        }
-    }
-]
+  {
+    key: "__ERROR",
+    isa: (object) => {
+      return object instanceof Error;
+    },
+    dehydrate: (object: Error) => {
+      return {
+        name: object.name,
+        stack: object.stack,
+        message: object.message,
+        cause: dehydrate(object.cause),
+      };
+    },
+    hydrate: (value: {
+      name: string;
+      stack: string;
+      message: string;
+      cause: unknown | undefined;
+    }) => {
+      console.error(value);
+      let e = new Error(value.message, { cause: value.cause });
+      e.stack = value.stack;
+      console.error(e);
+      return e;
+    },
+  },
+];
 
 /**
  * Registers a new (De)Hydration ruleset. For the rulesets, see {@link DehydrationFunctions} and {@link DehydrationClass}.
@@ -144,25 +151,40 @@ const dehydrationList: Array<DehydrationClass | DehydrationFunctions> = [
  *
  * @param ruleset The dehydration ruleset
  */
-export function registerDeHydration(ruleset: DehydrationFunctions | DehydrationClass) {
-    if (!ruleset || !(typeof ruleset === 'object' || typeof ruleset === 'function') || !('key' in ruleset) || !('type' in ruleset || ('isa' in ruleset && 'dehydrate' in ruleset && 'hydrate in ruleset'))) {
-        throw new Error('Bad DeHydration registration!')
-    }
+export function registerDeHydration(
+  ruleset: DehydrationFunctions | DehydrationClass,
+) {
+  if (
+    !ruleset ||
+    !(typeof ruleset === "object" || typeof ruleset === "function") ||
+    !("key" in ruleset) ||
+    !(
+      "type" in ruleset ||
+      ("isa" in ruleset && "dehydrate" in ruleset && "hydrate in ruleset")
+    )
+  ) {
+    throw new Error("Bad DeHydration registration!");
+  }
 
-    if ('type' in ruleset) {
-        if (!('dehydrate' in ruleset.type && 'hydrate' in ruleset.type)) {
-            throw new Error('Missing static methods "dehydrate" and "hydrate" on type! ' + ruleset.type)
-        }
-    } else if (!ruleset.isa || !ruleset.dehydrate || !ruleset.hydrate) {
-        throw new Error('Need to have the fields "isa", "dehydrate" and "hydrate" all defined')
+  if ("type" in ruleset) {
+    if (!("dehydrate" in ruleset.type && "hydrate" in ruleset.type)) {
+      throw new Error(
+        'Missing static methods "dehydrate" and "hydrate" on type! ' +
+          ruleset.type,
+      );
     }
+  } else if (!ruleset.isa || !ruleset.dehydrate || !ruleset.hydrate) {
+    throw new Error(
+      'Need to have the fields "isa", "dehydrate" and "hydrate" all defined',
+    );
+  }
 
-    if (dehydrationKeys.has(ruleset.key)) {
-        throw new Error(`DeHydration with key '${ruleset}' already registered!`)
-    }
+  if (dehydrationKeys.has(ruleset.key)) {
+    throw new Error(`DeHydration with key '${ruleset}' already registered!`);
+  }
 
-    dehydrationKeys.add(ruleset.key)
-    dehydrationList.push(ruleset)
+  dehydrationKeys.add(ruleset.key);
+  dehydrationList.push(ruleset);
 }
 
 /**
@@ -170,199 +192,209 @@ export function registerDeHydration(ruleset: DehydrationFunctions | DehydrationC
  * @param o
  */
 export function isTransferable(o: any): o is Transferable {
-    try {
-        return o instanceof ArrayBuffer || o instanceof MessagePort || o instanceof ImageBitmap || o instanceof OffscreenCanvas
-    }
-    catch {
-        return false
-    }
+  try {
+    return (
+      o instanceof ArrayBuffer ||
+      o instanceof MessagePort ||
+      o instanceof ImageBitmap ||
+      o instanceof OffscreenCanvas
+    );
+  } catch {
+    return false;
+  }
 }
 
 function dehydrate(obj: any): any {
-    if (obj && Array.isArray(obj)) {
-        return obj.map(dehydrate)
-    } else if (isTransferable(obj)) {
-        return obj
-    } else if (typeof obj === 'object' && obj) {
-        const v: any = {
-            __dehydrated: true,
-            __value: null
-        }
-        if (obj instanceof Address) {
-            v.__value = Address.dehydrate(obj)
-            v.__type = Address.HYDRATION_KEY
-        } else if (obj instanceof Mutex) {
-            v.__value = Mutex.dehydrate(obj)
-            v.__type = Mutex.HYDRATION_KEY
-        } else if (obj instanceof ConditionVariable) {
-            v.__value = ConditionVariable.dehydrate(obj)
-            v.__type = ConditionVariable.HYDRATION_KEY
-        } else if (obj instanceof WaitGroup) {
-            v.__value = WaitGroup.dehydrate(obj)
-            v.__type = WaitGroup.HYDRATION_KEY
-        } else if (obj instanceof Barrier) {
-            v.__value = Barrier.dehydrate(obj)
-            v.__type = Barrier.HYDRATION_KEY
-        } else if (obj instanceof Semaphore) {
-            v.__value = Semaphore.dehydrate(obj)
-            v.__type = Semaphore.HYDRATION_KEY
-        } else {
-            for (let i = dehydrationList.length; i > 0; i--) {
-                const de = dehydrationList[i - 1];
-                if ('type' in de) {
-                    if (obj instanceof de.type && de.type.dehydrate && de.type.hydrate) {
-                        v.__value = de.type.dehydrate(obj)
-                        v.__type = de.key
-                        return v
-                    }
-                } else if ('isa' in de) {
-                    if (de.isa(obj)) {
-                        v.__value = de.dehydrate(obj)
-                        v.__type = de.key
-                        return v
-                    }
-                }
-            }
-            for (const k of Object.keys(obj)) {
-                // don't touch transferable objects since that breaks our transfer array
-                if (isTransferable(obj[k])) {
-                    continue
-                }
-                obj[k] = dehydrate(obj[k])
-            }
-            return obj
-        }
-        return v
+  if (obj && Array.isArray(obj)) {
+    return obj.map(dehydrate);
+  } else if (isTransferable(obj)) {
+    return obj;
+  } else if (typeof obj === "object" && obj) {
+    const v: any = {
+      __dehydrated: true,
+      __value: null,
+    };
+    if (obj instanceof Address) {
+      v.__value = Address.dehydrate(obj);
+      v.__type = Address.HYDRATION_KEY;
+    } else if (obj instanceof Mutex) {
+      v.__value = Mutex.dehydrate(obj);
+      v.__type = Mutex.HYDRATION_KEY;
+    } else if (obj instanceof ConditionVariable) {
+      v.__value = ConditionVariable.dehydrate(obj);
+      v.__type = ConditionVariable.HYDRATION_KEY;
+    } else if (obj instanceof WaitGroup) {
+      v.__value = WaitGroup.dehydrate(obj);
+      v.__type = WaitGroup.HYDRATION_KEY;
+    } else if (obj instanceof Barrier) {
+      v.__value = Barrier.dehydrate(obj);
+      v.__type = Barrier.HYDRATION_KEY;
+    } else if (obj instanceof Semaphore) {
+      v.__value = Semaphore.dehydrate(obj);
+      v.__type = Semaphore.HYDRATION_KEY;
     } else {
-        return obj
+      for (let i = dehydrationList.length; i > 0; i--) {
+        const de = dehydrationList[i - 1];
+        if ("type" in de) {
+          if (obj instanceof de.type && de.type.dehydrate && de.type.hydrate) {
+            v.__value = de.type.dehydrate(obj);
+            v.__type = de.key;
+            return v;
+          }
+        } else if ("isa" in de) {
+          if (de.isa(obj)) {
+            v.__value = de.dehydrate(obj);
+            v.__type = de.key;
+            return v;
+          }
+        }
+      }
+      for (const k of Object.keys(obj)) {
+        // don't touch transferable objects since that breaks our transfer array
+        if (isTransferable(obj[k])) {
+          continue;
+        }
+        obj[k] = dehydrate(obj[k]);
+      }
+      return obj;
     }
+    return v;
+  } else {
+    return obj;
+  }
 }
 
 function hydrate(obj: any): any {
-    if (typeof obj === 'object' && obj !== null && '__dehydrated' in obj && obj.__dehydrated) {
-        const type: string | null | undefined = obj?.__type
-        if (!type) {
-            return obj
-        }
-        const val = obj.__value
-        switch (type) {
-            case Mutex.HYDRATION_KEY:
-                return Mutex.hydrate(val)
-            case ConditionVariable.HYDRATION_KEY:
-                return ConditionVariable.hydrate(val)
-            case Address.HYDRATION_KEY:
-                return Address.hydrate(val)
-            case WaitGroup.HYDRATION_KEY:
-                return WaitGroup.hydrate(val)
-            case Barrier.HYDRATION_KEY:
-                return Barrier.hydrate(val)
-            case Semaphore.HYDRATION_KEY:
-                return Semaphore.hydrate(val)
-        }
-
-        if (!dehydrationKeys.has(type)) {
-            console.error(`Unknown DeHydration '${type}! Unable to hydrate! Returning dehydrated object`)
-            return obj
-        } else {
-            for (const de of dehydrationList) {
-                if ('type' in de) {
-                    return de.type.hydrate(obj.__value, type)
-                } else if ('isa' in de) {
-                    return de.hydrate(obj.__value, type)
-                }
-            }
-        }
-    } else if (obj && Array.isArray(obj)) {
-        return obj.map(hydrate)
-    } else if (typeof obj === 'object' && obj) {
-        for (const k of Object.keys(obj)) {
-            obj[k] = hydrate(obj[k])
-        }
+  if (
+    typeof obj === "object" &&
+    obj !== null &&
+    "__dehydrated" in obj &&
+    obj.__dehydrated
+  ) {
+    const type: string | null | undefined = obj?.__type;
+    if (!type) {
+      return obj;
     }
-    return obj
+    const val = obj.__value;
+    switch (type) {
+      case Mutex.HYDRATION_KEY:
+        return Mutex.hydrate(val);
+      case ConditionVariable.HYDRATION_KEY:
+        return ConditionVariable.hydrate(val);
+      case Address.HYDRATION_KEY:
+        return Address.hydrate(val);
+      case WaitGroup.HYDRATION_KEY:
+        return WaitGroup.hydrate(val);
+      case Barrier.HYDRATION_KEY:
+        return Barrier.hydrate(val);
+      case Semaphore.HYDRATION_KEY:
+        return Semaphore.hydrate(val);
+    }
+
+    if (!dehydrationKeys.has(type)) {
+      console.error(
+        `Unknown DeHydration '${type}! Unable to hydrate! Returning dehydrated object`,
+      );
+      return obj;
+    } else {
+      for (const de of dehydrationList) {
+        if ("type" in de) {
+          return de.type.hydrate(obj.__value, type);
+        } else if ("isa" in de) {
+          return de.hydrate(obj.__value, type);
+        }
+      }
+    }
+  } else if (obj && Array.isArray(obj)) {
+    return obj.map(hydrate);
+  } else if (typeof obj === "object" && obj) {
+    for (const k of Object.keys(obj)) {
+      obj[k] = hydrate(obj[k]);
+    }
+  }
+  return obj;
 }
 
 function setThreadId(threadId: string) {
-    curThreadId = threadId
+  curThreadId = threadId;
 }
 
 function getThreadId(): string {
-    return curThreadId
+  return curThreadId;
 }
 
 /**
  * Options for creating a thread
  */
 export interface ThreadOptions {
-    /** Initial data for the thread (passed to `oninit`) */
-    initData?: any,
-    /** Custom onEventHandler for when a custom message is received from the thread */
-    onEventHandler?: ((event: any) => any),
-    /** Custom onEventHandler for when a custom message is received from the thread */
-    onTransferHandler?: ((transferEvent: any) => any),
-    /** Custom onErrorHandler for when an error is received from the thread */
-    onErrorHandler?: ((err: any) => any),
-    /**
-     * If set, then the thread will automatically close if it has not received a message after so many milliseconds.
-     *
-     * **IMPORTANT!** If you are sharing memory and using condition variables/wait groups/mutexes/semaphores/barriers, then this could cause the thread to die
-     * while it is holding shared resources!
-     */
-    closeWhenIdle?: number,
-    /**
-     * Custom handler for when a thread is closed/killed
-     */
-    closeHandler?: (thread: Thread) => any,
-    /**
-     * Type option to pass directly to the worker constructor. Often set to "module" when using esm modules
-     */
-    type?: 'classic' | 'module',
-    /**
-     * Name option to pass directly to the worker constructor. Mostly useful for debugging purposes.
-     * NOTE: this does not impact the peaks-threads id assigned to each worker
-     */
-    name?: string,
-    /**
-     * Determines how credentials are sent when using `fetch()` which will be passed directly to the worker constructor
-     */
-    credentials?: 'omit' | 'same-origin' | 'include',
+  /** Initial data for the thread (passed to `oninit`) */
+  initData?: any;
+  /** Custom onEventHandler for when a custom message is received from the thread */
+  onEventHandler?: (event: any) => any;
+  /** Custom onEventHandler for when a custom message is received from the thread */
+  onTransferHandler?: (transferEvent: any) => any;
+  /** Custom onErrorHandler for when an error is received from the thread */
+  onErrorHandler?: (err: any) => any;
+  /**
+   * If set, then the thread will automatically close if it has not received a message after so many milliseconds.
+   *
+   * **IMPORTANT!** If you are sharing memory and using condition variables/wait groups/mutexes/semaphores/barriers, then this could cause the thread to die
+   * while it is holding shared resources!
+   */
+  closeWhenIdle?: number;
+  /**
+   * Custom handler for when a thread is closed/killed
+   */
+  closeHandler?: (thread: Thread) => any;
+  /**
+   * Type option to pass directly to the worker constructor. Often set to "module" when using esm modules
+   */
+  type?: "classic" | "module";
+  /**
+   * Name option to pass directly to the worker constructor. Mostly useful for debugging purposes.
+   * NOTE: this does not impact the peaks-threads id assigned to each worker
+   */
+  name?: string;
+  /**
+   * Determines how credentials are sent when using `fetch()` which will be passed directly to the worker constructor
+   */
+  credentials?: "omit" | "same-origin" | "include";
 }
-
 
 /**
  * Options for connecting to a shared thread
  */
 export interface SharedThreadOptions {
-    /** Initial data for the connection (passed to `oninit`) */
-    initData?: any,
-    /** Custom onEventHandler for when a custom message is received from the thread */
-    onEventHandler?: ((event: any) => any),
-    /** Custom onEventHandler for when a custom message is received from the thread */
-    onTransferHandler?: ((transferEvent: any) => any),
-    /** Custom onErrorHandler for when an error is received from the thread */
-    onErrorHandler?: ((err: any) => any),
-    /** Custom onCloseHandler for when a port is closed */
-    onCloseHandler?: ((thread: SharedThread) => any),
-    /**
-     * If set, then the connection will automatically close if it has not received a message after so many milliseconds.
-     *
-     * **IMPORTANT!** If you are sharing memory and using condition variables/wait groups/mutexes/semaphores/barriers, then this could cause the thread to die
-     * while it is holding shared resources!
-     */
-    closeWhenIdle?: number,
-    /**
-     * Type option to pass directly to the worker constructor. Often set to "module" when using esm modules
-     */
-    type?: 'classic' | 'module',
-    /**
-     * Name option to pass directly to the worker constructor. Mostly useful for debugging purposes.
-     * NOTE: this does not impact the peaks-threads id assigned to each worker
-     */
-    name?: string,
-    /**
-     * Determines how credentials are sent when using `fetch()` which will be passed directly to the worker constructor
-     */
-    credentials?: 'omit' | 'same-origin' | 'include',
+  /** Initial data for the connection (passed to `oninit`) */
+  initData?: any;
+  /** Custom onEventHandler for when a custom message is received from the thread */
+  onEventHandler?: (event: any) => any;
+  /** Custom onEventHandler for when a custom message is received from the thread */
+  onTransferHandler?: (transferEvent: any) => any;
+  /** Custom onErrorHandler for when an error is received from the thread */
+  onErrorHandler?: (err: any) => any;
+  /** Custom onCloseHandler for when a port is closed */
+  onCloseHandler?: (thread: SharedThread) => any;
+  /**
+   * If set, then the connection will automatically close if it has not received a message after so many milliseconds.
+   *
+   * **IMPORTANT!** If you are sharing memory and using condition variables/wait groups/mutexes/semaphores/barriers, then this could cause the thread to die
+   * while it is holding shared resources!
+   */
+  closeWhenIdle?: number;
+  /**
+   * Type option to pass directly to the worker constructor. Often set to "module" when using esm modules
+   */
+  type?: "classic" | "module";
+  /**
+   * Name option to pass directly to the worker constructor. Mostly useful for debugging purposes.
+   * NOTE: this does not impact the peaks-threads id assigned to each worker
+   */
+  name?: string;
+  /**
+   * Determines how credentials are sent when using `fetch()` which will be passed directly to the worker constructor
+   */
+  credentials?: "omit" | "same-origin" | "include";
 }
 
 /**
@@ -436,398 +468,501 @@ export interface SharedThreadOptions {
  *
  */
 export class Thread {
-    private worker: Worker
-    private threadId: string
-    private incWorkId: number = 0
-    private handler: ((_: any) => any) | undefined
-    private transferHandler: ((_: any) => any) | undefined
-    private errHandler: ((_: any) => any) | undefined
-    private closeHandler: ((_: Thread) => any) | undefined
+  private worker: Worker;
+  private threadId: string;
+  private incWorkId: number = 0;
+  private handler: ((_: any) => any) | undefined;
+  private transferHandler: ((_: any) => any) | undefined;
+  private errHandler: ((_: any) => any) | undefined;
+  private closeHandler: ((_: Thread) => any) | undefined;
 
-    private workQueue: {
-        [id: string]: {
-            res: (_: any) => any,
-            rej: (_: any) => any,
-        }
-    } = {}
-    private killed: boolean = false
-    private pending: number = 0;
+  private workQueue: {
+    [id: string]: {
+      res: (_: any) => any;
+      rej: (_: any) => any;
+    };
+  } = {};
+  private killed: boolean = false;
+  private pending: number = 0;
 
-    private constructor(res: any, rej: any, script: string, options?: ThreadOptions) {
-        this.threadId = curThreadId + '->' + (++incThreadId)
-        const threadId = this.threadId
-        doLogs && console.log(curThreadId, 'Spawning thread' + this.threadId)
+  private constructor(
+    res: any,
+    rej: any,
+    script: string,
+    options?: ThreadOptions,
+  ) {
+    this.threadId = curThreadId + "->" + ++incThreadId;
+    const threadId = this.threadId;
+    doLogs && console.log(curThreadId, "Spawning thread" + this.threadId);
 
-        const workerOpts: any = {}
+    const workerOpts: any = {};
 
-        if (options?.type) {
-            workerOpts.type = options.type
-        }
+    if (options?.type) {
+      workerOpts.type = options.type;
+    }
 
-        if (options?.name) {
-            workerOpts.name = options.name
-        }
+    if (options?.name) {
+      workerOpts.name = options.name;
+    }
 
-        if (options?.credentials) {
-            workerOpts.credentials = options.credentials
-        }
+    if (options?.credentials) {
+      workerOpts.credentials = options.credentials;
+    }
 
-        this.worker = new Worker(script, workerOpts)
+    this.worker = new Worker(script, workerOpts);
 
-        const oldPostMessage = this.worker.postMessage.bind(this.worker)
-        this.worker.postMessage = (function (message: any, options?: ResponseOptions) {
-            doLogs && console.log(curThreadId, 'Sending message to ' + threadId, message)
-            message = dehydrate(message)
-            doLogs && console.log(curThreadId, 'Dehydrated message to ' + threadId, message)
+    const oldPostMessage = this.worker.postMessage.bind(this.worker);
+    this.worker.postMessage = (
+      function (message: any, options?: ResponseOptions) {
+        doLogs &&
+          console.log(curThreadId, "Sending message to " + threadId, message);
+        message = dehydrate(message);
+        doLogs &&
+          console.log(
+            curThreadId,
+            "Dehydrated message to " + threadId,
+            message,
+          );
 
-            if (options && options.transfer) {
-                for (let i = 0; i < options.transfer.length; ++i) {
-                    if (isTransferable(options.transfer[i])) {
-                        continue
-                    }
-
-                    const func = options.transfer[i] as TransferableFunction
-                    let t = func(message)
-                    if (!Array.isArray(t)) {
-                        options.transfer.splice(i, 1, t)
-                    }
-                    else {
-                        options.transfer.splice(i, 1, ...t)
-                    }
-                }
-                if (doLogs && options.transfer.length) {
-                    console.log(curThreadId, 'Transferring several items over, memory will no longer be owned')
-                }
+        if (options && options.transfer) {
+          for (let i = 0; i < options.transfer.length; ++i) {
+            if (isTransferable(options.transfer[i])) {
+              continue;
             }
 
-            return oldPostMessage(message, options as any)
-        } as any).bind(this.worker)
-
-        this.worker.postMessage({
-            __system: true,
-            threadId: this.threadId,
-            init: options?.initData || null,
-            closeWhenIdle: options?.closeWhenIdle || Infinity
-        })
-        this.handler = options?.onEventHandler
-        this.errHandler = options?.onErrorHandler
-        this.closeHandler = options?.closeHandler
-        this.transferHandler = options?.onTransferHandler
-
-        this.worker.onmessage = (e) => {
-            doLogs && console.log(curThreadId, 'Received message from ' + this.threadId, e)
-            e = {...e, data: hydrate(e.data)}
-
-            doLogs && console.log(curThreadId, 'Hydrated message from ' + this.threadId, e)
-            if (e.data && typeof e.data === 'object' && e.data.hasOwnProperty('__system') && e.data.__system) {
-                doLogs && console.log(curThreadId, 'System message from ' + this.threadId, e)
-                if (e.data.hasOwnProperty('__error')) {
-                    if (this.errHandler) {
-                        this.errHandler((e.data.__error))
-                    } else {
-                        console.error(`Received error from thread ${this.threadId}!`, e.data.__error)
-                        throw new Error(e.data.__error)
-                    }
-                } else if (e.data.hasOwnProperty('__close')) {
-                    doLogs && console.log(curThreadId, 'Thread ' + this.threadId + ' stopped running!', e)
-                    this.closeThread()
-                } else if (e.data.hasOwnProperty('workId') && (e.data.hasOwnProperty('res') || e.data.hasOwnProperty('rej'))) {
-                    if (!this.workQueue.hasOwnProperty(e.data.workId)) {
-                        console.error("UNKNOWN JOB " + e.data.workId + ' FROM THREAD ' + this.threadId)
-                    } else {
-                        const {res, rej} = this.workQueue[e.data.workId]
-                        try {
-                            if (e.data.hasOwnProperty('res')) {
-                                doLogs && console.log(curThreadId, 'Thread ' + this.threadId + ' finished work ' + e.data.workId)
-                                res(e.data.res)
-                            } else {
-                                rej(e.data.rej || new Error('Bad response from worker thread'))
-                            }
-                        } finally {
-                            delete this.workQueue[e.data.workId]
-                            --this.pending
-                        }
-                        return
-                    }
-                } else if (e.data.hasOwnProperty('__initd')) {
-                    if (e.data.__initd) {
-                        res()
-                    } else {
-                        rej(e.data.__error || new Error('Initialization Failed!'))
-                        this.worker.terminate()
-                        this.killed = true
-                    }
-                    doLogs && console.log(curThreadId, 'Spawned thread ' + this.threadId)
-                } else if (e.data.hasOwnProperty('__shared')) {
-                    const {res, rej} = this.workQueue[e.data.__shared]
-                    try {
-                        if (e.data.hasOwnProperty(`__error`)) {
-                            rej(e.data.__error)
-                        } else {
-                            res(null)
-                        }
-                    } finally {
-                        delete this.workQueue[e.data.__shared]
-                        --this.pending
-                    }
-                    return
-                } else if (e.data.hasOwnProperty('__transferd')) {
-                    const {res, rej} = this.workQueue[e.data.__transferd]
-                    try {
-                        if (e.data.hasOwnProperty(`__error`)) {
-                            rej(e.data.__error)
-                        } else {
-                            res(null)
-                        }
-                    } finally {
-                        delete this.workQueue[e.data.__transferd]
-                        --this.pending
-                    }
-                    return
-                } else if (e.data.hasOwnProperty('transfer')) {
-                    if (this.transferHandler) {
-                        this.transferHandler(e.data.message)
-                    } else if (this.handler) {
-                        this.handler(e)
-                    }
-                    return
-                } else {
-                    throw new Error('INVALID SYSTEM EVENT!')
-                }
-            } else if (this.handler) {
-                doLogs && console.log(curThreadId, 'Custom message from ' + this.threadId + ' dispatched to handler')
-                this.handler(e)
+            const func = options.transfer[i] as TransferableFunction;
+            let t = func(message);
+            if (!Array.isArray(t)) {
+              options.transfer.splice(i, 1, t);
             } else {
-                doLogs && console.log(curThreadId, 'Unknown message from ' + this.threadId + ' and no handler registered!')
+              options.transfer.splice(i, 1, ...t);
             }
+          }
+          if (doLogs && options.transfer.length) {
+            console.log(
+              curThreadId,
+              "Transferring several items over, memory will no longer be owned",
+            );
+          }
         }
 
-        this.worker.onerror = (e) => {
-            console.error(`Thread ${this.threadId} had an error!`, e)
-            if (this.errHandler) {
-                this.errHandler(e)
+        return oldPostMessage(message, options as any);
+      } as any
+    ).bind(this.worker);
+
+    this.worker.postMessage({
+      __system: true,
+      threadId: this.threadId,
+      init: options?.initData || null,
+      closeWhenIdle: options?.closeWhenIdle || Infinity,
+    });
+    this.handler = options?.onEventHandler;
+    this.errHandler = options?.onErrorHandler;
+    this.closeHandler = options?.closeHandler;
+    this.transferHandler = options?.onTransferHandler;
+
+    this.worker.onmessage = (e) => {
+      doLogs &&
+        console.log(curThreadId, "Received message from " + this.threadId, e);
+      e = { ...e, data: hydrate(e.data) };
+
+      doLogs &&
+        console.log(curThreadId, "Hydrated message from " + this.threadId, e);
+      if (
+        e.data &&
+        typeof e.data === "object" &&
+        e.data.hasOwnProperty("__system") &&
+        e.data.__system
+      ) {
+        doLogs &&
+          console.log(curThreadId, "System message from " + this.threadId, e);
+        if (e.data.hasOwnProperty("__error")) {
+          if (this.errHandler) {
+            this.errHandler(e.data.__error);
+          } else {
+            console.error(
+              `Received error from thread ${this.threadId}!`,
+              e.data.__error,
+            );
+            throw new Error(e.data.__error);
+          }
+        } else if (e.data.hasOwnProperty("__close")) {
+          doLogs &&
+            console.log(
+              curThreadId,
+              "Thread " + this.threadId + " stopped running!",
+              e,
+            );
+          this.closeThread();
+        } else if (
+          e.data.hasOwnProperty("workId") &&
+          (e.data.hasOwnProperty("res") || e.data.hasOwnProperty("rej"))
+        ) {
+          if (!this.workQueue.hasOwnProperty(e.data.workId)) {
+            console.error(
+              "UNKNOWN JOB " + e.data.workId + " FROM THREAD " + this.threadId,
+            );
+          } else {
+            const { res, rej } = this.workQueue[e.data.workId];
+            try {
+              if (e.data.hasOwnProperty("res")) {
+                doLogs &&
+                  console.log(
+                    curThreadId,
+                    "Thread " +
+                      this.threadId +
+                      " finished work " +
+                      e.data.workId,
+                  );
+                res(e.data.res);
+              } else {
+                rej(e.data.rej || new Error("Bad response from worker thread"));
+              }
+            } finally {
+              delete this.workQueue[e.data.workId];
+              --this.pending;
             }
-        }
-
-        this.worker.onmessageerror = (e) => {
-            console.error(`Cound not send message to thread ${this.threadId}!`, e)
-            if (this.errHandler) {
-                this.errHandler(e)
-            }
-        }
-    }
-
-    /**
-     * Spawns and initializes a new thread for consumption.
-     * @param script URI for the script that will be run by the thread (should include this library)
-     * @param options Options for initializing the thread
-     * @return A promise for when the thread is initialized (important to await the promise before using shared memory in any thread to avoid potential race conditions). Promise may reject if there was an initialization error.
-     */
-    public static spawn(script: string, options?: ThreadOptions): Promise<Thread> {
-        return new Promise<Thread>((resolve, reject) => {
-            const t = new Thread(() => resolve(t), (err: any) => reject(err), script, options)
-        })
-    }
-
-    private nextWorkId() {
-        if (crypto && crypto.randomUUID) {
-            return this.threadId + ':' + crypto.randomUUID()
-        } else {
-            return this.threadId + ':' + (this.incWorkId++)
-        }
-    }
-
-    /**
-     * Gets the thread's corresponding thread id
-     */
-    public id(): string {
-        return this.threadId
-    }
-
-    /**
-     * Set the handler for receiving custom `postMessage` events from the thread
-     * @param h Handler for when an event is sent back from the event
-     */
-    public setOnEvent(h: ((_: any) => any) | undefined) {
-        this.handler = h
-    }
-
-    /**
-     * Set the handler for receiving transferred objects from the thread
-     * @param h Handler for when ownership transferred
-     */
-    public setOnTransfer(h: ((_: any) => any) | undefined) {
-        this.transferHandler = h
-    }
-
-    /**
-     * Set the handler for receiving custom `postMessage` events from the thread
-     * @param h Handler for when there is an error from the thread
-     */
-    public setOnError(h: ((_: any) => any) | undefined) {
-        this.errHandler = h
-    }
-
-    /**
-     * Helper method for thread pools to claim a thread temporarily while waiting for a micro-tick to happen
-     * (usually necessary when a pool can scale up as spawning threads is asynchronous, so pool scaling must be asynchronous
-     *  which means that thread claiming must be asynchronous as well)
-     */
-    public poolClaim() {
-        ++this.pending
-    }
-
-    /**
-     * Helper method for thread pools to release a temporary claim on a thread
-     */
-    public poolRelease() {
-        --this.pending
-    }
-
-    /**
-     * Set the handler for when a thread is closed/killed
-     * @param h Handler for when a thread is closed/killed
-     */
-    public setOnClose(h: ((t: Thread) => any) | undefined) {
-        this.closeHandler = h
-    }
-
-    /**
-     * Sends some piece of work off to a thread and returns a promise waiting for a response
-     * @param work The work to send to the thread (passed to your `onwork` handler)
-     * @param options Options for sending an event (e.g. transfer data)
-     * @return Promise with the result object from doing the work
-     */
-    public sendWork<R = any>(work: any, options?: StructuredSerializeOptions): Promise<R> {
-        if (this.killed) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        const workId = this.nextWorkId()
-        doLogs && console.log(curThreadId, `Sending work ${workId} to thread ${this.threadId}`, work)
-        ++this.pending
-        const promise = new Promise((res, rej) => {
-            this.workQueue[workId] = {res, rej}
-            this.worker.postMessage({__system: true, workId, work}, options)
-        })
-        return promise as Promise<R>
-    }
-
-    /**
-     * Gets the number of pending requests that have a system-defined response for a thread
-     * This helps indicate how busy a thread is
-     */
-    public numPendingRequests(): number {
-        return this.pending
-    }
-
-    /**
-     * Send a custom event to the thread
-     * @param event Event to send
-     * @param options Options for sending an event
-     */
-    public sendEvent(event: any, options?: StructuredSerializeOptions): void {
-        if (this.killed) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        doLogs && console.log(curThreadId, `Sending custom event to thread ${this.threadId}`, event)
-        this.worker.postMessage(event, options)
-    }
-
-    /**
-     * Gets the underlying worker from the thread.
-     * USE CAUTION WHEN USING THIS METHOD!
-     */
-    public raw() {
-        if (this.killed) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        return this.worker
-    }
-
-    /**
-     * Share an item (or items) with another thread.
-     * Often used when needing to pass synchronization primitives outside the initialization method
-     * @param item Item (or an array of items) that will be shared
-     * @param message Any additional message information to pass along
-     * @param options Options for postMessage
-     * @return A promise for when the share is complete (important to await the promise before using shared memory in any thread to avoid potential race conditions).
-     */
-    public share(item: any, message?: any, options?: StructuredSerializeOptions): Promise<void> {
-        if (this.killed) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        const shareId = this.nextWorkId()
-        ++this.pending
-        const promise = new Promise((res, rej) => {
-            doLogs && console.log(curThreadId, 'queued share', shareId)
-            this.workQueue[shareId] = {res, rej}
-        })
-        doLogs && console.log(curThreadId, `Sharing item with thread ${this.threadId}`, item, message)
-        if (typeof message != 'undefined') {
-            this.worker.postMessage({__system: true, shareId, share: item, message}, options)
-        } else {
-            this.worker.postMessage({__system: true, shareId, share: item}, options)
-        }
-        return promise as Promise<void>
-    }
-
-    /**
-     * Transfer ownership of data to a thread
-     * @param message Message to send indicating transfer information (should contain how the transferred object is accessed, like the TypedArray)
-     * @param items The items to transfer ownership of (often an underlying piece of the accessed objects, liek the TypedArray's buffer)
-     */
-    public transfer(message: any, items: any[]): Promise<void> {
-        if (this.killed) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        if (!Array.isArray(items)) {
-            if (!items) {
-                items = []
+            return;
+          }
+        } else if (e.data.hasOwnProperty("__initd")) {
+          if (e.data.__initd) {
+            res();
+          } else {
+            rej(e.data.__error || new Error("Initialization Failed!"));
+            this.worker.terminate();
+            this.killed = true;
+          }
+          doLogs && console.log(curThreadId, "Spawned thread " + this.threadId);
+        } else if (e.data.hasOwnProperty("__shared")) {
+          const { res, rej } = this.workQueue[e.data.__shared];
+          try {
+            if (e.data.hasOwnProperty(`__error`)) {
+              rej(e.data.__error);
             } else {
-                items = [items]
+              res(null);
             }
+          } finally {
+            delete this.workQueue[e.data.__shared];
+            --this.pending;
+          }
+          return;
+        } else if (e.data.hasOwnProperty("__transferd")) {
+          const { res, rej } = this.workQueue[e.data.__transferd];
+          try {
+            if (e.data.hasOwnProperty(`__error`)) {
+              rej(e.data.__error);
+            } else {
+              res(null);
+            }
+          } finally {
+            delete this.workQueue[e.data.__transferd];
+            --this.pending;
+          }
+          return;
+        } else if (e.data.hasOwnProperty("transfer")) {
+          if (this.transferHandler) {
+            this.transferHandler(e.data.message);
+          } else if (this.handler) {
+            this.handler(e);
+          }
+          return;
+        } else {
+          throw new Error("INVALID SYSTEM EVENT!");
         }
-        const transferId = this.nextWorkId()
-        ++this.pending
-        const promise = new Promise((res, rej) => {
-            doLogs && console.log(curThreadId, 'queued transfer', transferId)
-            this.workQueue[transferId] = {res, rej}
-        })
-        doLogs && console.log(curThreadId, `Transferring items to thread ${this.threadId}`, items, message)
-        this.worker.postMessage({__system: true, transfer: transferId, message}, {transfer: items})
-        return promise as Promise<void>
-    }
+      } else if (this.handler) {
+        doLogs &&
+          console.log(
+            curThreadId,
+            "Custom message from " + this.threadId + " dispatched to handler",
+          );
+        this.handler(e);
+      } else {
+        doLogs &&
+          console.log(
+            curThreadId,
+            "Unknown message from " +
+              this.threadId +
+              " and no handler registered!",
+          );
+      }
+    };
 
-    /**
-     * Kills a thread (force stops it)
-     * NOTE: USE THIS WITH CAUTION SINCE IT WILL TERMINATE A THREAD WITHOUT ANY CLEANUP! THIS CAN LEAD TO DEADLOCKS, LIVELOCKS, AND OTHER ISSUES!
-     */
-    public kill() {
-        doLogs && console.log(curThreadId, `Killing thread ${this.threadId}`)
-        this.worker.terminate()
-        this.closeThread()
-    }
+    this.worker.onerror = (e) => {
+      console.error(`Thread ${this.threadId} had an error!`, e);
+      if (this.errHandler) {
+        this.errHandler(e);
+      }
+    };
 
-    /**
-     * Attempts to gracefully close a thread.
-     * Will call the custom `onclose` handle in the thread if it is present.
-     * Will try waiting for all in-flight messages to finish processing. However, if the wait times out, then a force kill will be issued.
-     */
-    public close() {
-        doLogs && console.log(curThreadId, `Gracefully shutting down thread ${this.threadId}`)
-        this.killed = true
-        this.worker.postMessage({__system: true, __close: true})
-    }
+    this.worker.onmessageerror = (e) => {
+      console.error(`Cound not send message to thread ${this.threadId}!`, e);
+      if (this.errHandler) {
+        this.errHandler(e);
+      }
+    };
+  }
 
-    private closeThread() {
-        this.killed = true
-        for (const {rej} of Object.values(this.workQueue)) {
-            rej(new Error('Thread stopped running!'))
-        }
-        if (this.closeHandler) {
-            this.closeHandler(this)
-        }
+  /**
+   * Spawns and initializes a new thread for consumption.
+   * @param script URI for the script that will be run by the thread (should include this library)
+   * @param options Options for initializing the thread
+   * @return A promise for when the thread is initialized (important to await the promise before using shared memory in any thread to avoid potential race conditions). Promise may reject if there was an initialization error.
+   */
+  public static spawn(
+    script: string,
+    options?: ThreadOptions,
+  ): Promise<Thread> {
+    return new Promise<Thread>((resolve, reject) => {
+      const t = new Thread(
+        () => resolve(t),
+        (err: any) => reject(err),
+        script,
+        options,
+      );
+    });
+  }
+
+  private nextWorkId() {
+    if (crypto && crypto.randomUUID) {
+      return this.threadId + ":" + crypto.randomUUID();
+    } else {
+      return this.threadId + ":" + this.incWorkId++;
     }
+  }
+
+  /**
+   * Gets the thread's corresponding thread id
+   */
+  public id(): string {
+    return this.threadId;
+  }
+
+  /**
+   * Set the handler for receiving custom `postMessage` events from the thread
+   * @param h Handler for when an event is sent back from the event
+   */
+  public setOnEvent(h: ((_: any) => any) | undefined) {
+    this.handler = h;
+  }
+
+  /**
+   * Set the handler for receiving transferred objects from the thread
+   * @param h Handler for when ownership transferred
+   */
+  public setOnTransfer(h: ((_: any) => any) | undefined) {
+    this.transferHandler = h;
+  }
+
+  /**
+   * Set the handler for receiving custom `postMessage` events from the thread
+   * @param h Handler for when there is an error from the thread
+   */
+  public setOnError(h: ((_: any) => any) | undefined) {
+    this.errHandler = h;
+  }
+
+  /**
+   * Helper method for thread pools to claim a thread temporarily while waiting for a micro-tick to happen
+   * (usually necessary when a pool can scale up as spawning threads is asynchronous, so pool scaling must be asynchronous
+   *  which means that thread claiming must be asynchronous as well)
+   */
+  public poolClaim() {
+    ++this.pending;
+  }
+
+  /**
+   * Helper method for thread pools to release a temporary claim on a thread
+   */
+  public poolRelease() {
+    --this.pending;
+  }
+
+  /**
+   * Set the handler for when a thread is closed/killed
+   * @param h Handler for when a thread is closed/killed
+   */
+  public setOnClose(h: ((t: Thread) => any) | undefined) {
+    this.closeHandler = h;
+  }
+
+  /**
+   * Sends some piece of work off to a thread and returns a promise waiting for a response
+   * @param work The work to send to the thread (passed to your `onwork` handler)
+   * @param options Options for sending an event (e.g. transfer data)
+   * @return Promise with the result object from doing the work
+   */
+  public sendWork<R = any>(
+    work: any,
+    options?: StructuredSerializeOptions,
+  ): Promise<R> {
+    if (this.killed) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    const workId = this.nextWorkId();
+    doLogs &&
+      console.log(
+        curThreadId,
+        `Sending work ${workId} to thread ${this.threadId}`,
+        work,
+      );
+    ++this.pending;
+    const promise = new Promise((res, rej) => {
+      this.workQueue[workId] = { res, rej };
+      this.worker.postMessage({ __system: true, workId, work }, options);
+    });
+    return promise as Promise<R>;
+  }
+
+  /**
+   * Gets the number of pending requests that have a system-defined response for a thread
+   * This helps indicate how busy a thread is
+   */
+  public numPendingRequests(): number {
+    return this.pending;
+  }
+
+  /**
+   * Send a custom event to the thread
+   * @param event Event to send
+   * @param options Options for sending an event
+   */
+  public sendEvent(event: any, options?: StructuredSerializeOptions): void {
+    if (this.killed) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    doLogs &&
+      console.log(
+        curThreadId,
+        `Sending custom event to thread ${this.threadId}`,
+        event,
+      );
+    this.worker.postMessage(event, options);
+  }
+
+  /**
+   * Gets the underlying worker from the thread.
+   * USE CAUTION WHEN USING THIS METHOD!
+   */
+  public raw() {
+    if (this.killed) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    return this.worker;
+  }
+
+  /**
+   * Share an item (or items) with another thread.
+   * Often used when needing to pass synchronization primitives outside the initialization method
+   * @param item Item (or an array of items) that will be shared
+   * @param message Any additional message information to pass along
+   * @param options Options for postMessage
+   * @return A promise for when the share is complete (important to await the promise before using shared memory in any thread to avoid potential race conditions).
+   */
+  public share(
+    item: any,
+    message?: any,
+    options?: StructuredSerializeOptions,
+  ): Promise<void> {
+    if (this.killed) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    const shareId = this.nextWorkId();
+    ++this.pending;
+    const promise = new Promise((res, rej) => {
+      doLogs && console.log(curThreadId, "queued share", shareId);
+      this.workQueue[shareId] = { res, rej };
+    });
+    doLogs &&
+      console.log(
+        curThreadId,
+        `Sharing item with thread ${this.threadId}`,
+        item,
+        message,
+      );
+    if (typeof message != "undefined") {
+      this.worker.postMessage(
+        { __system: true, shareId, share: item, message },
+        options,
+      );
+    } else {
+      this.worker.postMessage(
+        { __system: true, shareId, share: item },
+        options,
+      );
+    }
+    return promise as Promise<void>;
+  }
+
+  /**
+   * Transfer ownership of data to a thread
+   * @param message Message to send indicating transfer information (should contain how the transferred object is accessed, like the TypedArray)
+   * @param items The items to transfer ownership of (often an underlying piece of the accessed objects, liek the TypedArray's buffer)
+   */
+  public transfer(message: any, items: any[]): Promise<void> {
+    if (this.killed) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    if (!Array.isArray(items)) {
+      if (!items) {
+        items = [];
+      } else {
+        items = [items];
+      }
+    }
+    const transferId = this.nextWorkId();
+    ++this.pending;
+    const promise = new Promise((res, rej) => {
+      doLogs && console.log(curThreadId, "queued transfer", transferId);
+      this.workQueue[transferId] = { res, rej };
+    });
+    doLogs &&
+      console.log(
+        curThreadId,
+        `Transferring items to thread ${this.threadId}`,
+        items,
+        message,
+      );
+    this.worker.postMessage(
+      { __system: true, transfer: transferId, message },
+      { transfer: items },
+    );
+    return promise as Promise<void>;
+  }
+
+  /**
+   * Kills a thread (force stops it)
+   * NOTE: USE THIS WITH CAUTION SINCE IT WILL TERMINATE A THREAD WITHOUT ANY CLEANUP! THIS CAN LEAD TO DEADLOCKS, LIVELOCKS, AND OTHER ISSUES!
+   */
+  public kill() {
+    doLogs && console.log(curThreadId, `Killing thread ${this.threadId}`);
+    this.worker.terminate();
+    this.closeThread();
+  }
+
+  /**
+   * Attempts to gracefully close a thread.
+   * Will call the custom `onclose` handle in the thread if it is present.
+   * Will try waiting for all in-flight messages to finish processing. However, if the wait times out, then a force kill will be issued.
+   */
+  public close() {
+    doLogs &&
+      console.log(
+        curThreadId,
+        `Gracefully shutting down thread ${this.threadId}`,
+      );
+    this.killed = true;
+    this.worker.postMessage({ __system: true, __close: true });
+  }
+
+  private closeThread() {
+    this.killed = true;
+    for (const { rej } of Object.values(this.workQueue)) {
+      rej(new Error("Thread stopped running!"));
+    }
+    if (this.closeHandler) {
+      this.closeHandler(this);
+    }
+  }
 }
 
 /**
@@ -857,396 +992,502 @@ export class Thread {
  * Again, the semantics are different, how things work are different, and if you're not aware then you will run into issues.
  */
 export class SharedThread {
-    private worker: SharedWorker
-    private incWorkId: number = 0
-    private handler: ((_: any) => any) | undefined
-    private transferHandler: ((_: any) => any) | undefined
-    private closeHandler: ((_: SharedThread) => any) | undefined
-    private errHandler: ((_: any) => any) | undefined
+  private worker: SharedWorker;
+  private incWorkId: number = 0;
+  private handler: ((_: any) => any) | undefined;
+  private transferHandler: ((_: any) => any) | undefined;
+  private closeHandler: ((_: SharedThread) => any) | undefined;
+  private errHandler: ((_: any) => any) | undefined;
 
-    private workQueue: {
-        [id: string]: {
-            res: (_: any) => any,
-            rej: (_: any) => any,
-        }
-    } = {}
-    private disconnected: boolean = false
-    private pending: number = 0;
-    private script: string
+  private workQueue: {
+    [id: string]: {
+      res: (_: any) => any;
+      rej: (_: any) => any;
+    };
+  } = {};
+  private disconnected: boolean = false;
+  private pending: number = 0;
+  private script: string;
 
-    private constructor(res: any, rej: any, script: string, options?: SharedThreadOptions) {
-        doLogs && console.log(curThreadId, 'Connecting to shared thread ' + script)
-        this.script = script
+  private constructor(
+    res: any,
+    rej: any,
+    script: string,
+    options?: SharedThreadOptions,
+  ) {
+    doLogs && console.log(curThreadId, "Connecting to shared thread " + script);
+    this.script = script;
 
-        const workerOpts: any = {}
+    const workerOpts: any = {};
 
-        if (options?.type) {
-            workerOpts.type = options.type
-        }
+    if (options?.type) {
+      workerOpts.type = options.type;
+    }
 
-        if (options?.name) {
-            workerOpts.name = options.name
-        }
+    if (options?.name) {
+      workerOpts.name = options.name;
+    }
 
-        if (options?.credentials) {
-            workerOpts.credentials = options.credentials
-        }
+    if (options?.credentials) {
+      workerOpts.credentials = options.credentials;
+    }
 
-        this.worker = new SharedWorker(script, workerOpts)
+    this.worker = new SharedWorker(script, workerOpts);
 
-        this.worker.port.start()
+    this.worker.port.start();
 
-        const oldPostMessage = this.worker.port.postMessage.bind(this.worker.port)
-        this.worker.port.postMessage = (function (message: any, options?: ResponseOptions) {
-            doLogs && console.log(curThreadId, 'Sending message to shared thread ' + script, message)
-            message = dehydrate(message)
-            doLogs && console.log(curThreadId, 'Dehydrated message to shared thread ' + script, message)
+    const oldPostMessage = this.worker.port.postMessage.bind(this.worker.port);
+    this.worker.port.postMessage = (
+      function (message: any, options?: ResponseOptions) {
+        doLogs &&
+          console.log(
+            curThreadId,
+            "Sending message to shared thread " + script,
+            message,
+          );
+        message = dehydrate(message);
+        doLogs &&
+          console.log(
+            curThreadId,
+            "Dehydrated message to shared thread " + script,
+            message,
+          );
 
-            if (options && options.transfer) {
-                for (let i = 0; i < options.transfer.length; ++i) {
-                    if (isTransferable(options.transfer[i])) {
-                        continue
-                    }
-
-                    const func = options.transfer[i] as TransferableFunction
-                    let t = func(message)
-                    if (!Array.isArray(t)) {
-                        options.transfer.splice(i, 1, t)
-                    }
-                    else {
-                        options.transfer.splice(i, 1, ...t)
-                    }
-                }
-                if (doLogs && options.transfer.length) {
-                    console.log(curThreadId, 'Transferring several items over, memory will no longer be owned')
-                }
+        if (options && options.transfer) {
+          for (let i = 0; i < options.transfer.length; ++i) {
+            if (isTransferable(options.transfer[i])) {
+              continue;
             }
-            return oldPostMessage(message, options as any)
-        } as any).bind(this.worker.port)
 
-        this.worker.port.postMessage({
-            __system: true,
-            init: options?.initData || null,
-            threadId: this.script
-        })
-        this.handler = options?.onEventHandler
-        this.errHandler = options?.onErrorHandler
-        this.transferHandler = options?.onTransferHandler
-        this.closeHandler = options?.onCloseHandler
-
-        this.worker.port.onmessage = (e) => {
-            doLogs && console.log(curThreadId, 'Received message from ' + script, e)
-            e = {...e, data: hydrate(e.data)}
-
-            doLogs && console.log(curThreadId, 'Hydrated message from ' + script, e)
-            if (e.data && typeof e.data === 'object' && e.data.hasOwnProperty('__system') && e.data.__system) {
-                doLogs && console.log(curThreadId, 'System message from ' + script, e)
-                if (e.data.hasOwnProperty('__error')) {
-                    if (this.errHandler) {
-                        this.errHandler((e.data.__error))
-                    } else {
-                        console.error(`Received error from thread ${script}!`, e.data.__error)
-                        throw new Error(e.data.__error)
-                    }
-                } else if (e.data.hasOwnProperty('__close')) {
-                    doLogs && console.log(curThreadId, 'Thread ' + script + ' stopped running!', e)
-                    this.disconnected = true
-                    if (this.closeHandler) {
-                        this.closeHandler(this)
-                    }
-                } else if (e.data.hasOwnProperty('workId') && (e.data.hasOwnProperty('res') || e.data.hasOwnProperty('rej'))) {
-                    if (!this.workQueue.hasOwnProperty(e.data.workId)) {
-                        console.error("UNKNOWN JOB " + e.data.workId + ' FROM THREAD ' + script)
-                    } else {
-                        const {res, rej} = this.workQueue[e.data.workId]
-                        try {
-                            if (e.data.hasOwnProperty('res')) {
-                                doLogs && console.log(curThreadId, 'Thread ' + script + ' finished work ' + e.data.workId)
-                                res(e.data.res)
-                            } else {
-                                rej(e.data.rej || new Error('Bad response from worker thread'))
-                            }
-                        } finally {
-                            delete this.workQueue[e.data.workId]
-                            --this.pending
-                        }
-                        return
-                    }
-                } else if (e.data.hasOwnProperty('__initd')) {
-                    if (e.data.__initd) {
-                        res()
-                    } else {
-                        rej(e.data.__error || new Error('Initialization Failed!'))
-                        this.worker.port.close()
-                        this.disconnected = true
-                    }
-                    doLogs && console.log(curThreadId, 'Spawned thread ' + script)
-                } else if (e.data.hasOwnProperty('__shared')) {
-                    const {res, rej} = this.workQueue[e.data.__shared]
-                    try {
-                        if (e.data.hasOwnProperty(`__error`)) {
-                            rej(e.data.__error)
-                        } else {
-                            res(null)
-                        }
-                    } finally {
-                        delete this.workQueue[e.data.__shared]
-                        --this.pending
-                    }
-                    return
-                } else if (e.data.hasOwnProperty('__transferd')) {
-                    const {res, rej} = this.workQueue[e.data.__transferd]
-                    try {
-                        if (e.data.hasOwnProperty(`__error`)) {
-                            rej(e.data.__error)
-                        } else {
-                            res(null)
-                        }
-                    } finally {
-                        delete this.workQueue[e.data.__transferd]
-                        --this.pending
-                    }
-                    return
-                } else if (e.data.hasOwnProperty('transfer')) {
-                    if (this.transferHandler) {
-                        this.transferHandler(e.data.message)
-                    } else if (this.handler) {
-                        this.handler(e)
-                    }
-                    return
-                } else {
-                    throw new Error('INVALID SYSTEM EVENT!')
-                }
-            } else if (this.handler) {
-                doLogs && console.log(curThreadId, 'Custom message from ' + script + ' dispatched to handler')
-                this.handler(e)
+            const func = options.transfer[i] as TransferableFunction;
+            let t = func(message);
+            if (!Array.isArray(t)) {
+              options.transfer.splice(i, 1, t);
             } else {
-                doLogs && console.log(curThreadId, 'Unknown message from ' + script + ' and no handler registered!')
+              options.transfer.splice(i, 1, ...t);
             }
+          }
+          if (doLogs && options.transfer.length) {
+            console.log(
+              curThreadId,
+              "Transferring several items over, memory will no longer be owned",
+            );
+          }
         }
+        return oldPostMessage(message, options as any);
+      } as any
+    ).bind(this.worker.port);
 
-        this.worker.onerror = (e) => {
-            console.error(`Thread ${this.script} had an error!`, e)
-            if (this.errHandler) {
-                this.errHandler(e)
+    this.worker.port.postMessage({
+      __system: true,
+      init: options?.initData || null,
+      threadId: this.script,
+    });
+    this.handler = options?.onEventHandler;
+    this.errHandler = options?.onErrorHandler;
+    this.transferHandler = options?.onTransferHandler;
+    this.closeHandler = options?.onCloseHandler;
+
+    this.worker.port.onmessage = (e) => {
+      doLogs && console.log(curThreadId, "Received message from " + script, e);
+      e = { ...e, data: hydrate(e.data) };
+
+      doLogs && console.log(curThreadId, "Hydrated message from " + script, e);
+      if (
+        e.data &&
+        typeof e.data === "object" &&
+        e.data.hasOwnProperty("__system") &&
+        e.data.__system
+      ) {
+        doLogs && console.log(curThreadId, "System message from " + script, e);
+        if (e.data.hasOwnProperty("__error")) {
+          if (this.errHandler) {
+            this.errHandler(e.data.__error);
+          } else {
+            console.error(
+              `Received error from thread ${script}!`,
+              e.data.__error,
+            );
+            throw new Error(e.data.__error);
+          }
+        } else if (e.data.hasOwnProperty("__close")) {
+          doLogs &&
+            console.log(
+              curThreadId,
+              "Thread " + script + " stopped running!",
+              e,
+            );
+          this.disconnected = true;
+          if (this.closeHandler) {
+            this.closeHandler(this);
+          }
+        } else if (
+          e.data.hasOwnProperty("workId") &&
+          (e.data.hasOwnProperty("res") || e.data.hasOwnProperty("rej"))
+        ) {
+          if (!this.workQueue.hasOwnProperty(e.data.workId)) {
+            console.error(
+              "UNKNOWN JOB " + e.data.workId + " FROM THREAD " + script,
+            );
+          } else {
+            const { res, rej } = this.workQueue[e.data.workId];
+            try {
+              if (e.data.hasOwnProperty("res")) {
+                doLogs &&
+                  console.log(
+                    curThreadId,
+                    "Thread " + script + " finished work " + e.data.workId,
+                  );
+                res(e.data.res);
+              } else {
+                rej(e.data.rej || new Error("Bad response from worker thread"));
+              }
+            } finally {
+              delete this.workQueue[e.data.workId];
+              --this.pending;
             }
-        }
-
-        this.worker.port.onmessageerror = (e) => {
-            console.error(`Cound not send message to thread ${this.script}!`, e)
-            if (this.errHandler) {
-                this.errHandler(e)
-            }
-        }
-    }
-
-    /**
-     * Connects to a shared thread
-     * @param script URI for the script that will be run by the thread (should include this library)
-     * @param options Options for initializing the thread
-     * @return A promise for when the thread is initialized (important to await the promise before using shared memory in any thread to avoid potential race conditions). Promise may reject if there was an initialization error.
-     */
-    public static connect(script: string, options?: SharedThreadOptions): Promise<SharedThread> {
-        return new Promise<SharedThread>((resolve, reject) => {
-            const t = new SharedThread(() => resolve(t), (err: any) => reject(err), script, options)
-        })
-    }
-
-    private nextWorkId() {
-        if (crypto && crypto.randomUUID) {
-            return this.script + ':' + crypto.randomUUID()
-        } else {
-            return this.script + ':' + (this.incWorkId++)
-        }
-    }
-
-    /**
-     * Gets the thread's corresponding thread id
-     */
-    public id(): string {
-        return this.script
-    }
-
-    /**
-     * Set the handler for receiving custom `postMessage` events from the thread
-     * @param h Handler for when an event is sent back from the event
-     */
-    public setOnEvent(h: ((_: any) => any) | undefined) {
-        this.handler = h
-    }
-
-    /**
-     * Set the handler for receiving transferred objects from the thread
-     * @param h Handler for when ownership transferred
-     */
-    public setOnTransfer(h: ((_: any) => any) | undefined) {
-        this.transferHandler = h
-    }
-
-    /**
-     * Set the handler for receiving custom `postMessage` events from the thread
-     * @param h Handler for when there is an error from the thread
-     */
-    public setOnError(h: ((_: any) => any) | undefined) {
-        this.errHandler = h
-    }
-
-    /**
-     * Sends some piece of work off to a thread and returns a promise waiting for a response
-     * @param work The work to send to the thread (passed to your `onwork` handler)
-     * @param options Options for the postMessage method
-     * @return Promise with the result object from doing the work
-     */
-    public sendWork<R = any>(work: any, options?: StructuredSerializeOptions|ResponseOptions): Promise<R> {
-        if (this.disconnected) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        const workId = this.nextWorkId()
-        doLogs && console.log(curThreadId, `Sending work ${workId} to thread ${this.script}`, work)
-        ++this.pending
-        const promise = new Promise((res, rej) => {
-            this.workQueue[workId] = {res, rej}
-            this.worker.port.postMessage({__system: true, workId, work}, options)
-        })
-        return promise as Promise<R>
-    }
-
-    /**
-     * Gets the number of pending requests that have a system-defined response for a thread
-     * This helps indicate how busy a thread is
-     */
-    public numPendingRequests(): number {
-        return this.pending
-    }
-
-    /**
-     * Send a custom event to the thread
-     * @param event Event to send
-     * @param options Options for sending an event
-     */
-    public sendEvent(event: any, options?: StructuredSerializeOptions): void {
-        if (this.disconnected) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        doLogs && console.log(curThreadId, `Sending custom event to thread ${this.script}`, event)
-        this.worker.port.postMessage(event, options)
-    }
-    /**
-     * Set the handler for when a thread is closed/killed
-     * @param h Handler for when a thread is closed/killed
-     */
-    public setOnClose(h: ((t: SharedThread) => any) | undefined) {
-        this.closeHandler = h
-    }
-
-    /**
-     * Gets the underlying worker from the thread.
-     * USE CAUTION WHEN USING THIS METHOD!
-     */
-    public raw() {
-        if (this.disconnected) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        return this.worker
-    }
-
-    /**
-     * Share an item (or items) with another thread.
-     * Often used when needing to pass synchronization primitives outside the initialization method
-     * @param item Item (or an array of items) that will be shared
-     * @param message Any additional message information to pass along
-     * @param options Options for postMessage
-     * @return A promise for when the share is complete (important to await the promise before using shared memory in any thread to avoid potential race conditions).
-     */
-    public share(item: any, message?: any, options?: StructuredSerializeOptions): Promise<void> {
-        if (this.disconnected) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        const shareId = this.nextWorkId()
-        ++this.pending
-        const promise = new Promise((res, rej) => {
-            doLogs && console.log(curThreadId, 'queued share', shareId)
-            this.workQueue[shareId] = {res, rej}
-        })
-        doLogs && console.log(curThreadId, `Sharing item with thread ${this.script}`, item, message)
-        if (typeof message != 'undefined') {
-            this.worker.port.postMessage({__system: true, shareId, share: item, message}, options)
-        } else {
-            this.worker.port.postMessage({__system: true, shareId, share: item}, options)
-        }
-        return promise as Promise<void>
-    }
-
-    /**
-     * Transfer ownership of data to a thread
-     * @param message Message to send indicating transfer information (should contain how the transferred object is accessed, like the TypedArray)
-     * @param items The items to transfer ownership of (often an underlying piece of the accessed objects, liek the TypedArray's buffer)
-     */
-    public transfer(message: any, items: Transferable|TransferableFetchers): Promise<void> {
-        if (this.disconnected) {
-            throw new Error("Invalid Operation! Thread is stopped!")
-        }
-        if (!Array.isArray(items)) {
-            if (!items) {
-                items = []
+            return;
+          }
+        } else if (e.data.hasOwnProperty("__initd")) {
+          if (e.data.__initd) {
+            res();
+          } else {
+            rej(e.data.__error || new Error("Initialization Failed!"));
+            this.worker.port.close();
+            this.disconnected = true;
+          }
+          doLogs && console.log(curThreadId, "Spawned thread " + script);
+        } else if (e.data.hasOwnProperty("__shared")) {
+          const { res, rej } = this.workQueue[e.data.__shared];
+          try {
+            if (e.data.hasOwnProperty(`__error`)) {
+              rej(e.data.__error);
             } else {
-                items = [items]
+              res(null);
             }
+          } finally {
+            delete this.workQueue[e.data.__shared];
+            --this.pending;
+          }
+          return;
+        } else if (e.data.hasOwnProperty("__transferd")) {
+          const { res, rej } = this.workQueue[e.data.__transferd];
+          try {
+            if (e.data.hasOwnProperty(`__error`)) {
+              rej(e.data.__error);
+            } else {
+              res(null);
+            }
+          } finally {
+            delete this.workQueue[e.data.__transferd];
+            --this.pending;
+          }
+          return;
+        } else if (e.data.hasOwnProperty("transfer")) {
+          if (this.transferHandler) {
+            this.transferHandler(e.data.message);
+          } else if (this.handler) {
+            this.handler(e);
+          }
+          return;
+        } else {
+          throw new Error("INVALID SYSTEM EVENT!");
         }
-        const transferId = this.nextWorkId()
-        ++this.pending
-        const promise = new Promise((res, rej) => {
-            doLogs && console.log(curThreadId, 'queued transfer', transferId)
-            this.workQueue[transferId] = {res, rej}
-        })
-        doLogs && console.log(curThreadId, `Transferring items to thread ${this.script}`, items, message)
-        this.worker.port.postMessage({__system: true, transfer: transferId, message}, {transfer: items} as any)
-        return promise as Promise<void>
-    }
+      } else if (this.handler) {
+        doLogs &&
+          console.log(
+            curThreadId,
+            "Custom message from " + script + " dispatched to handler",
+          );
+        this.handler(e);
+      } else {
+        doLogs &&
+          console.log(
+            curThreadId,
+            "Unknown message from " + script + " and no handler registered!",
+          );
+      }
+    };
 
-    /**
-     * Disconnects from a port
-     */
-    public disconnect() {
-        doLogs && console.log(curThreadId, `Disconnecting from thread ${this.script}`)
-        this.disconnected = true
-        this.worker.port.postMessage({__system: true, __close: true})
-    }
+    this.worker.onerror = (e) => {
+      console.error(`Thread ${this.script} had an error!`, e);
+      if (this.errHandler) {
+        this.errHandler(e);
+      }
+    };
 
-    /**
-     * Forces a disconnect
-     * NOTE: USE THIS WITH CAUTION SINCE IT WILL TERMINATE A THREAD WITHOUT ANY CLEANUP! THIS CAN LEAD TO DEADLOCKS, LIVELOCKS, AND OTHER ISSUES!
-     */
-    public sever() {
-        doLogs && console.log(curThreadId, `Disconnecting from thread ${this.script}`)
-        this.worker.port.close()
-        this.disconnected = true
-        if (this.closeHandler) {
-            this.closeHandler(this)
-        }
+    this.worker.port.onmessageerror = (e) => {
+      console.error(`Cound not send message to thread ${this.script}!`, e);
+      if (this.errHandler) {
+        this.errHandler(e);
+      }
+    };
+  }
+
+  /**
+   * Connects to a shared thread
+   * @param script URI for the script that will be run by the thread (should include this library)
+   * @param options Options for initializing the thread
+   * @return A promise for when the thread is initialized (important to await the promise before using shared memory in any thread to avoid potential race conditions). Promise may reject if there was an initialization error.
+   */
+  public static connect(
+    script: string,
+    options?: SharedThreadOptions,
+  ): Promise<SharedThread> {
+    return new Promise<SharedThread>((resolve, reject) => {
+      const t = new SharedThread(
+        () => resolve(t),
+        (err: any) => reject(err),
+        script,
+        options,
+      );
+    });
+  }
+
+  private nextWorkId() {
+    if (crypto && crypto.randomUUID) {
+      return this.script + ":" + crypto.randomUUID();
+    } else {
+      return this.script + ":" + this.incWorkId++;
     }
+  }
+
+  /**
+   * Gets the thread's corresponding thread id
+   */
+  public id(): string {
+    return this.script;
+  }
+
+  /**
+   * Set the handler for receiving custom `postMessage` events from the thread
+   * @param h Handler for when an event is sent back from the event
+   */
+  public setOnEvent(h: ((_: any) => any) | undefined) {
+    this.handler = h;
+  }
+
+  /**
+   * Set the handler for receiving transferred objects from the thread
+   * @param h Handler for when ownership transferred
+   */
+  public setOnTransfer(h: ((_: any) => any) | undefined) {
+    this.transferHandler = h;
+  }
+
+  /**
+   * Set the handler for receiving custom `postMessage` events from the thread
+   * @param h Handler for when there is an error from the thread
+   */
+  public setOnError(h: ((_: any) => any) | undefined) {
+    this.errHandler = h;
+  }
+
+  /**
+   * Sends some piece of work off to a thread and returns a promise waiting for a response
+   * @param work The work to send to the thread (passed to your `onwork` handler)
+   * @param options Options for the postMessage method
+   * @return Promise with the result object from doing the work
+   */
+  public sendWork<R = any>(
+    work: any,
+    options?: StructuredSerializeOptions | ResponseOptions,
+  ): Promise<R> {
+    if (this.disconnected) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    const workId = this.nextWorkId();
+    doLogs &&
+      console.log(
+        curThreadId,
+        `Sending work ${workId} to thread ${this.script}`,
+        work,
+      );
+    ++this.pending;
+    const promise = new Promise((res, rej) => {
+      this.workQueue[workId] = { res, rej };
+      this.worker.port.postMessage({ __system: true, workId, work }, options);
+    });
+    return promise as Promise<R>;
+  }
+
+  /**
+   * Gets the number of pending requests that have a system-defined response for a thread
+   * This helps indicate how busy a thread is
+   */
+  public numPendingRequests(): number {
+    return this.pending;
+  }
+
+  /**
+   * Send a custom event to the thread
+   * @param event Event to send
+   * @param options Options for sending an event
+   */
+  public sendEvent(event: any, options?: StructuredSerializeOptions): void {
+    if (this.disconnected) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    doLogs &&
+      console.log(
+        curThreadId,
+        `Sending custom event to thread ${this.script}`,
+        event,
+      );
+    this.worker.port.postMessage(event, options);
+  }
+  /**
+   * Set the handler for when a thread is closed/killed
+   * @param h Handler for when a thread is closed/killed
+   */
+  public setOnClose(h: ((t: SharedThread) => any) | undefined) {
+    this.closeHandler = h;
+  }
+
+  /**
+   * Gets the underlying worker from the thread.
+   * USE CAUTION WHEN USING THIS METHOD!
+   */
+  public raw() {
+    if (this.disconnected) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    return this.worker;
+  }
+
+  /**
+   * Share an item (or items) with another thread.
+   * Often used when needing to pass synchronization primitives outside the initialization method
+   * @param item Item (or an array of items) that will be shared
+   * @param message Any additional message information to pass along
+   * @param options Options for postMessage
+   * @return A promise for when the share is complete (important to await the promise before using shared memory in any thread to avoid potential race conditions).
+   */
+  public share(
+    item: any,
+    message?: any,
+    options?: StructuredSerializeOptions,
+  ): Promise<void> {
+    if (this.disconnected) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    const shareId = this.nextWorkId();
+    ++this.pending;
+    const promise = new Promise((res, rej) => {
+      doLogs && console.log(curThreadId, "queued share", shareId);
+      this.workQueue[shareId] = { res, rej };
+    });
+    doLogs &&
+      console.log(
+        curThreadId,
+        `Sharing item with thread ${this.script}`,
+        item,
+        message,
+      );
+    if (typeof message != "undefined") {
+      this.worker.port.postMessage(
+        { __system: true, shareId, share: item, message },
+        options,
+      );
+    } else {
+      this.worker.port.postMessage(
+        { __system: true, shareId, share: item },
+        options,
+      );
+    }
+    return promise as Promise<void>;
+  }
+
+  /**
+   * Transfer ownership of data to a thread
+   * @param message Message to send indicating transfer information (should contain how the transferred object is accessed, like the TypedArray)
+   * @param items The items to transfer ownership of (often an underlying piece of the accessed objects, liek the TypedArray's buffer)
+   */
+  public transfer(
+    message: any,
+    items: Transferable | TransferableFetchers,
+  ): Promise<void> {
+    if (this.disconnected) {
+      throw new Error("Invalid Operation! Thread is stopped!");
+    }
+    if (!Array.isArray(items)) {
+      if (!items) {
+        items = [];
+      } else {
+        items = [items];
+      }
+    }
+    const transferId = this.nextWorkId();
+    ++this.pending;
+    const promise = new Promise((res, rej) => {
+      doLogs && console.log(curThreadId, "queued transfer", transferId);
+      this.workQueue[transferId] = { res, rej };
+    });
+    doLogs &&
+      console.log(
+        curThreadId,
+        `Transferring items to thread ${this.script}`,
+        items,
+        message,
+      );
+    this.worker.port.postMessage(
+      { __system: true, transfer: transferId, message },
+      { transfer: items } as any,
+    );
+    return promise as Promise<void>;
+  }
+
+  /**
+   * Disconnects from a port
+   */
+  public disconnect() {
+    doLogs &&
+      console.log(curThreadId, `Disconnecting from thread ${this.script}`);
+    this.disconnected = true;
+    this.worker.port.postMessage({ __system: true, __close: true });
+  }
+
+  /**
+   * Forces a disconnect
+   * NOTE: USE THIS WITH CAUTION SINCE IT WILL TERMINATE A THREAD WITHOUT ANY CLEANUP! THIS CAN LEAD TO DEADLOCKS, LIVELOCKS, AND OTHER ISSUES!
+   */
+  public sever() {
+    doLogs &&
+      console.log(curThreadId, `Disconnecting from thread ${this.script}`);
+    this.worker.port.close();
+    this.disconnected = true;
+    if (this.closeHandler) {
+      this.closeHandler(this);
+    }
+  }
 }
 
 function promiseLike(p: any) {
-    return p && (p instanceof Promise || ((typeof p === 'object' || typeof p === 'function') && 'then' in p && typeof p?.then === 'function'))
+  return (
+    p &&
+    (p instanceof Promise ||
+      ((typeof p === "object" || typeof p === "function") &&
+        "then" in p &&
+        typeof p?.then === "function"))
+  );
 }
 
-let threadIdleTimeout: any = null
-let threadIdle: number = 0
+let threadIdleTimeout: any = null;
+let threadIdle: number = 0;
 let messagesProcessing: number = 0;
 
 /**
  * Checks if we're in a dedicated worker context
  */
 export function isDedicatedWorker(): boolean {
-    return typeof window === 'undefined' && !!(self && (self as any).postMessage)
+  return typeof window === "undefined" && !!(self && (self as any).postMessage);
 }
 
 /**
  * Checks if we're in a shared worker context
  */
 export function isSharedWorker(): boolean {
-    return typeof window === 'undefined' && self && !(self as any).postMessage
+  return typeof window === "undefined" && self && !(self as any).postMessage;
 }
 
 /**
@@ -1257,11 +1498,11 @@ export function isSharedWorker(): boolean {
  * @param err Error to send
  */
 export function sendError(err: any) {
-    if (isDedicatedWorker()) {
-        postMessage({__system: true, __error: err})
-    } else {
-        throw new Error('sendError only usable from worker thread!')
-    }
+  if (isDedicatedWorker()) {
+    postMessage({ __system: true, __error: err });
+  } else {
+    throw new Error("sendError only usable from worker thread!");
+  }
 }
 
 /**
@@ -1271,18 +1512,20 @@ export function sendError(err: any) {
  *
  */
 export function numMessagesProcessing(): number {
-    if (isDedicatedWorker() || isSharedWorker()) {
-        return messagesProcessing
-    } else {
-        throw new Error('numMessagesProcessing only usable from worker or shared worker thread!')
-    }
+  if (isDedicatedWorker() || isSharedWorker()) {
+    return messagesProcessing;
+  } else {
+    throw new Error(
+      "numMessagesProcessing only usable from worker or shared worker thread!",
+    );
+  }
 }
 
 /**
  * Gets the current peaks-threads assigned thread id
  */
 export function curThread(): string {
-    return curThreadId
+  return curThreadId;
 }
 
 /**
@@ -1291,13 +1534,13 @@ export function curThread(): string {
  * Returning from any other handler or using from the main thread is not meaningful
  */
 export class ResponseWithTransfer<T> {
-    public message: T
-    public transfer: TransferableFetchers
+  public message: T;
+  public transfer: TransferableFetchers;
 
-    constructor(message: T, transfer: TransferableFetchers) {
-        this.message = message
-        this.transfer = transfer
-    }
+  constructor(message: T, transfer: TransferableFetchers) {
+    this.message = message;
+    this.transfer = transfer;
+  }
 }
 
 /**
@@ -1306,8 +1549,8 @@ export class ResponseWithTransfer<T> {
  * Returning from any other handler or using from the main thread is not meaningful
  */
 export interface ResponseOptions {
-    transfer?: TransferableFetchers
-    targetOrigin?: string;
+  transfer?: TransferableFetchers;
+  targetOrigin?: string;
 }
 
 /**
@@ -1316,13 +1559,13 @@ export interface ResponseOptions {
  * Returning from any other handler or using from the main thread is not meaningful
  */
 export class ResponseWithOptions<T> {
-    public message: T
-    public options: ResponseOptions
+  public message: T;
+  public options: ResponseOptions;
 
-    constructor(message: T, options: ResponseOptions) {
-        this.message = message
-        this.options = options
-    }
+  constructor(message: T, options: ResponseOptions) {
+    this.message = message;
+    this.options = options;
+  }
 }
 
 /**
@@ -1333,260 +1576,336 @@ export class ResponseWithOptions<T> {
  * @param message Message for the transfer (usually includes how to access the transferred resource)
  * @param items Memory ownership to transfer
  */
-export function transfer(message: any, items: Transferable|TransferableFetchers) {
-    if (self && !(self as any).onconnect) {
-        if (!Array.isArray(items)) {
-            if (!items) {
-                items = []
-            } else {
-                items = [items]
-            }
-        }
-        postMessage({__system: true, transfer: true, message}, {transfer: items} as any)
-    } else {
-        throw new Error('transfer only usable from worker thread!')
+export function transfer(
+  message: any,
+  items: Transferable | TransferableFetchers,
+) {
+  if (self && !(self as any).onconnect) {
+    if (!Array.isArray(items)) {
+      if (!items) {
+        items = [];
+      } else {
+        items = [items];
+      }
     }
+    postMessage({ __system: true, transfer: true, message }, {
+      transfer: items,
+    } as any);
+  } else {
+    throw new Error("transfer only usable from worker thread!");
+  }
 }
 
 if (isDedicatedWorker()) {
-    // Worker scope
+  // Worker scope
 
-    const oldPostMessage = self.postMessage
-    self.postMessage = (function (message: any, ...args: any[]) {
-        return oldPostMessage(dehydrate(message), ...args)
-    }.bind(self) as any)
+  const oldPostMessage = self.postMessage;
+  self.postMessage = function (message: any, ...args: any[]) {
+    return oldPostMessage(dehydrate(message), ...args);
+  }.bind(self) as any;
 
-    let closing = false
-    let closed = false
-    const oldClose = self.close
-    self.close = (function () {
-        // make calls to close idempotent
-        if (closing) {
-            return
-        }
-
-        doLogs && console.log(curThreadId, 'Closing thread')
-        closing = true
-        // notify asap that we're shutting down so the parent thread doesn't use us
-        // we'll stop allowing messages after a milliseconds
-        postMessage({__system: true, __close: true})
-
-        // microtick 1
-        new Promise((res) => {
-            setTimeout(res, 5)
-        })
-            .then(async () => {
-                // Shut down all incoming messages - we won't be allowing anything else to come through
-                closed = true
-                doLogs && console.log(curThreadId, 'Attempting graceful shutdown...')
-                // exclude this message from "processing" temporarily to make the waiting protocol easier to write
-                // We don't want to confuse devs who are waiting for all messages to finish processing
-
-                // Wait up to 1 second for in-flight messages to close gracefully
-                let attempt = 0
-                const maxAttempts = 10
-                doLogs && console.log(curThreadId, 'Outstanding events: ', messagesProcessing)
-                while (messagesProcessing > 0 && attempt++ < maxAttempts) {
-                    doLogs && console.log(curThreadId, `Detected messages in-flight, pausing for 100ms while waiting for messages to complete. Attempt ${attempt}/${maxAttempts}`)
-                    await new Promise(res => {
-                        setTimeout(() => res(null), 100)
-                    })
-                }
-
-                if (messagesProcessing > 0) {
-                    console.error(curThreadId, `Failed to wait for in-flight messages to finish! Potential deadlock! Force killing thread!`)
-                }
-
-                if ((self as any).onclose) {
-                    doLogs && console.log(curThreadId, 'Calling onclose');
-                    try {
-                        const r = (self as any).onclose()
-
-                        if (promiseLike(r)) {
-                            await r
-                        }
-                    } catch (e) {
-                        console.error(curThreadId, 'ERROR IN CUSTOM onclose! IGNORING AND CLOSING', e)
-                    }
-                }
-            })
-            .finally(() => {
-                console.log(curThreadId, 'Closed thread')
-                oldClose()
-            })
-    });
-
-    /**
-     * Gets the number of messages currently being processed
-     */
-    (self as any).numMessagesProcessing = numMessagesProcessing;
-
-    /**
-     * Gets the current thread id
-     */
-    (self as any).curThread = curThread;
-
-    (self as any).transfer = transfer;
-
-    (self as any).sendError = sendError
-    self.onmessage = async (e: MessageEvent) => {
-        if (closed) {
-            console.error(curThreadId, 'Thread is shutting down but receiving messages!')
-            sendError(new Error(`Thread is shutting down!`))
-        }
-
-        if (threadIdleTimeout) {
-            doLogs && console.log(curThreadId, 'Pausing idle timer for thread ' + curThreadId)
-            clearTimeout(threadIdleTimeout)
-            threadIdleTimeout = null
-        }
-        ++messagesProcessing
-
-        doLogs && console.log(curThreadId, "Received message", e, `Num messages active: ${messagesProcessing}`)
-
-        try {
-            try {
-                e = {...e, data: hydrate(e.data)}
-            } catch (err) {
-                console.error('HYDRATION FAILED!', err, e.data)
-                e = {...e, data: hydrate(e.data)}
-            }
-
-            doLogs && console.log(curThreadId, "Hydrated message", e)
-
-            try {
-                let res: any = undefined
-
-                if (typeof e.data === 'object' || typeof e.data === 'function') {
-                    if ('__system' in e.data && e.data.__system) {
-                        doLogs && console.log(curThreadId, "Message is a system event!")
-                        if ('share' in e.data && 'shareId' in e.data) {
-                            if ((self as any).onshare) {
-                                res = (self as any).onshare({share: e.data.share, message: e.data.message})
-                            } else if ((self as any).onevent) {
-                                doLogs && console.log(curThreadId, "onshare not found, falling back to onevent");
-                                res = (self as any).onevent(e)
-                            }
-
-                            if (promiseLike(res)) {
-                                await res
-                            }
-                            postMessage({__system: true, __shared: e.data.shareId})
-                        } else if ('transfer' in e.data) {
-                            if ((self as any).ontransfer) {
-                                res = (self as any).ontransfer(e.data.message)
-                            } else if ((self as any).onevent) {
-                                doLogs && console.log(curThreadId, "ontransfer not found, falling back to onevent");
-                                res = (self as any).onevent(e)
-                            }
-
-                            if (promiseLike(res)) {
-                                await res
-                            }
-                            postMessage({__system: true, __transferd: e.data.transfer})
-                        } else if ('workId' in e.data && 'work' in e.data) {
-                            if ((self as any).onwork) {
-                                res = (self as any).onwork(e.data.work)
-                            } else if ((self as any).onevent) {
-                                doLogs && console.log(curThreadId, "onwork not found, falling back to onevent");
-                                res = (self as any).onevent(e)
-                            }
-                            if (promiseLike(res)) {
-                                res = await res
-                            }
-
-                            if (res instanceof ResponseWithTransfer) {
-                                postMessage({
-                                    __system: true,
-                                    threadId: getThreadId(),
-                                    workId: e.data.workId,
-                                    res: res.message,
-                                }, {transfer: res.transfer})
-                            }
-                            else if (res instanceof ResponseWithOptions) {
-                                postMessage({
-                                    __system: true,
-                                    threadId: getThreadId(),
-                                    workId: e.data.workId,
-                                    res: res.message,
-                                }, res.options)
-                            }
-                            else {
-                                postMessage({
-                                    __system: true,
-                                    threadId: getThreadId(),
-                                    workId: e.data.workId,
-                                    res: res
-                                })
-                            }
-                        } else if ('threadId' in e.data && 'init' in e.data) {
-                            setThreadId(e.data.threadId)
-                            if ((self as any).oninit) {
-                                (self as any).oninit(e.data.init)
-                            } else {
-                                doLogs && console.log(curThreadId, "oninit not found, skipping custom initialization");
-                            }
-
-                            if (promiseLike(res)) {
-                                await res
-                            }
-
-                            if ('closeWhenIdle' in e.data && isFinite(e.data.closeWhenIdle)) {
-                                doLogs && console.log(curThreadId, "idle timeout found! Creating idle timeout");
-                                threadIdle = e.data.closeWhenIdle
-                            }
-                            postMessage({__system: true, __initd: true})
-                            doLogs && console.log(curThreadId, 'Thread ready!')
-                        } else if ('__close' in e.data) {
-                            self.close()
-                        } else {
-                            throw new Error('INVALID SYSTEM EVENT!' + JSON.stringify(e.data))
-                        }
-                    } else if ((self as any).onevent) {
-                        doLogs && console.log(curThreadId, "Message is a custom event!");
-                        const res = (self as any).onevent(e)
-                        if (promiseLike(res)) {
-                            await res
-                        }
-                    }
-                } else if ((self as any).onevent) {
-                    doLogs && console.log(curThreadId, "Message is a custom event!");
-                    const res = (self as any).onevent(e)
-                    if (promiseLike(res)) {
-                        await res
-                    }
-                }
-            } catch (err) {
-                if (e.data && typeof e.data === 'object' && '__system' in e.data) {
-                    if ('workId' in e.data) {
-                        postMessage({__system: true, threadId: getThreadId(), workId: e.data.workId, rej: err})
-                    } else if ('transfer' in e.data) {
-                        postMessage({
-                            __system: true,
-                            threadId: getThreadId(),
-                            __transferd: e.data.transfer,
-                            __error: err
-                        })
-                    } else if ('share' in e.data) {
-                        postMessage({__system: true, threadId: getThreadId(), __shared: e.data.transfer, rej: err})
-                    } else if ('init' in e.data) {
-                        postMessage({__system: true, threadId: getThreadId(), __initd: false, __error: err})
-                        self.close()
-                    } else if ('__close' in e.data) {
-                        sendError(err)
-                        self.close()
-                    }
-                } else {
-                    sendError(err)
-                }
-            }
-        } finally {
-            --messagesProcessing
-            if (messagesProcessing === 0 && threadIdle > 0 && isFinite(threadIdle)) {
-                threadIdleTimeout = setTimeout(() => self.close(), threadIdle)
-            }
-        }
+  let closing = false;
+  let closed = false;
+  const oldClose = self.close;
+  self.close = function () {
+    // make calls to close idempotent
+    if (closing) {
+      return;
     }
+
+    doLogs && console.log(curThreadId, "Closing thread");
+    closing = true;
+    // notify asap that we're shutting down so the parent thread doesn't use us
+    // we'll stop allowing messages after a milliseconds
+    postMessage({ __system: true, __close: true });
+
+    // microtick 1
+    new Promise((res) => {
+      setTimeout(res, 5);
+    })
+      .then(async () => {
+        // Shut down all incoming messages - we won't be allowing anything else to come through
+        closed = true;
+        doLogs && console.log(curThreadId, "Attempting graceful shutdown...");
+        // exclude this message from "processing" temporarily to make the waiting protocol easier to write
+        // We don't want to confuse devs who are waiting for all messages to finish processing
+
+        // Wait up to 1 second for in-flight messages to close gracefully
+        let attempt = 0;
+        const maxAttempts = 10;
+        doLogs &&
+          console.log(curThreadId, "Outstanding events: ", messagesProcessing);
+        while (messagesProcessing > 0 && attempt++ < maxAttempts) {
+          doLogs &&
+            console.log(
+              curThreadId,
+              `Detected messages in-flight, pausing for 100ms while waiting for messages to complete. Attempt ${attempt}/${maxAttempts}`,
+            );
+          await new Promise((res) => {
+            setTimeout(() => res(null), 100);
+          });
+        }
+
+        if (messagesProcessing > 0) {
+          console.error(
+            curThreadId,
+            `Failed to wait for in-flight messages to finish! Potential deadlock! Force killing thread!`,
+          );
+        }
+
+        if ((self as any).onclose) {
+          doLogs && console.log(curThreadId, "Calling onclose");
+          try {
+            const r = (self as any).onclose();
+
+            if (promiseLike(r)) {
+              await r;
+            }
+          } catch (e) {
+            console.error(
+              curThreadId,
+              "ERROR IN CUSTOM onclose! IGNORING AND CLOSING",
+              e,
+            );
+          }
+        }
+      })
+      .finally(() => {
+        console.log(curThreadId, "Closed thread");
+        oldClose();
+      });
+  };
+
+  /**
+   * Gets the number of messages currently being processed
+   */
+  (self as any).numMessagesProcessing = numMessagesProcessing;
+
+  /**
+   * Gets the current thread id
+   */
+  (self as any).curThread = curThread;
+  (self as any).transfer = transfer;
+  (self as any).sendError = sendError;
+  self.onmessage = async (e: MessageEvent) => {
+    if (closed) {
+      console.error(
+        curThreadId,
+        "Thread is shutting down but receiving messages!",
+      );
+      sendError(new Error(`Thread is shutting down!`));
+    }
+
+    if (threadIdleTimeout) {
+      doLogs &&
+        console.log(
+          curThreadId,
+          "Pausing idle timer for thread " + curThreadId,
+        );
+      clearTimeout(threadIdleTimeout);
+      threadIdleTimeout = null;
+    }
+    ++messagesProcessing;
+
+    doLogs &&
+      console.log(
+        curThreadId,
+        "Received message",
+        e,
+        `Num messages active: ${messagesProcessing}`,
+      );
+
+    try {
+      try {
+        e = { ...e, data: hydrate(e.data) };
+      } catch (err) {
+        console.error("HYDRATION FAILED!", err, e.data);
+        e = { ...e, data: hydrate(e.data) };
+      }
+
+      doLogs && console.log(curThreadId, "Hydrated message", e);
+
+      try {
+        let res: any = undefined;
+
+        if (typeof e.data === "object" || typeof e.data === "function") {
+          if ("__system" in e.data && e.data.__system) {
+            doLogs && console.log(curThreadId, "Message is a system event!");
+            if ("share" in e.data && "shareId" in e.data) {
+              if ((self as any).onshare) {
+                res = (self as any).onshare({
+                  share: e.data.share,
+                  message: e.data.message,
+                });
+              } else if ((self as any).onevent) {
+                doLogs &&
+                  console.log(
+                    curThreadId,
+                    "onshare not found, falling back to onevent",
+                  );
+                res = (self as any).onevent(e);
+              }
+
+              if (promiseLike(res)) {
+                await res;
+              }
+              postMessage({
+                __system: true,
+                __shared: e.data.shareId,
+              });
+            } else if ("transfer" in e.data) {
+              if ((self as any).ontransfer) {
+                res = (self as any).ontransfer(e.data.message);
+              } else if ((self as any).onevent) {
+                doLogs &&
+                  console.log(
+                    curThreadId,
+                    "ontransfer not found, falling back to onevent",
+                  );
+                res = (self as any).onevent(e);
+              }
+
+              if (promiseLike(res)) {
+                await res;
+              }
+              postMessage({
+                __system: true,
+                __transferd: e.data.transfer,
+              });
+            } else if ("workId" in e.data && "work" in e.data) {
+              if ((self as any).onwork) {
+                res = (self as any).onwork(e.data.work);
+              } else if ((self as any).onevent) {
+                doLogs &&
+                  console.log(
+                    curThreadId,
+                    "onwork not found, falling back to onevent",
+                  );
+                res = (self as any).onevent(e);
+              }
+              if (promiseLike(res)) {
+                res = await res;
+              }
+
+              if (res instanceof ResponseWithTransfer) {
+                postMessage(
+                  {
+                    __system: true,
+                    threadId: getThreadId(),
+                    workId: e.data.workId,
+                    res: res.message,
+                  },
+                  { transfer: res.transfer },
+                );
+              } else if (res instanceof ResponseWithOptions) {
+                postMessage(
+                  {
+                    __system: true,
+                    threadId: getThreadId(),
+                    workId: e.data.workId,
+                    res: res.message,
+                  },
+                  res.options,
+                );
+              } else {
+                postMessage({
+                  __system: true,
+                  threadId: getThreadId(),
+                  workId: e.data.workId,
+                  res: res,
+                });
+              }
+            } else if ("threadId" in e.data && "init" in e.data) {
+              setThreadId(e.data.threadId);
+              if ((self as any).oninit) {
+                (self as any).oninit(e.data.init);
+              } else {
+                doLogs &&
+                  console.log(
+                    curThreadId,
+                    "oninit not found, skipping custom initialization",
+                  );
+              }
+
+              if (promiseLike(res)) {
+                await res;
+              }
+
+              if ("closeWhenIdle" in e.data && isFinite(e.data.closeWhenIdle)) {
+                doLogs &&
+                  console.log(
+                    curThreadId,
+                    "idle timeout found! Creating idle timeout",
+                  );
+                threadIdle = e.data.closeWhenIdle;
+              }
+              postMessage({ __system: true, __initd: true });
+              doLogs && console.log(curThreadId, "Thread ready!");
+            } else if ("__close" in e.data) {
+              self.close();
+            } else {
+              throw new Error("INVALID SYSTEM EVENT!" + JSON.stringify(e.data));
+            }
+          } else if ((self as any).onevent) {
+            doLogs && console.log(curThreadId, "Message is a custom event!");
+            const res = (self as any).onevent(e);
+            if (promiseLike(res)) {
+              await res;
+            }
+          }
+        } else if ((self as any).onevent) {
+          doLogs && console.log(curThreadId, "Message is a custom event!");
+          const res = (self as any).onevent(e);
+          if (promiseLike(res)) {
+            await res;
+          }
+        }
+      } catch (err) {
+        if (e.data && typeof e.data === "object" && "__system" in e.data) {
+          if ("workId" in e.data) {
+            postMessage({
+              __system: true,
+              threadId: getThreadId(),
+              workId: e.data.workId,
+              rej: err,
+            });
+          } else if ("transfer" in e.data) {
+            postMessage({
+              __system: true,
+              threadId: getThreadId(),
+              __transferd: e.data.transfer,
+              __error: err,
+            });
+          } else if ("share" in e.data) {
+            postMessage({
+              __system: true,
+              threadId: getThreadId(),
+              __shared: e.data.transfer,
+              rej: err,
+            });
+          } else if ("init" in e.data) {
+            postMessage({
+              __system: true,
+              threadId: getThreadId(),
+              __initd: false,
+              __error: err,
+            });
+            self.close();
+          } else if ("__close" in e.data) {
+            sendError(err);
+            self.close();
+          }
+        } else {
+          sendError(err);
+        }
+      }
+    } finally {
+      --messagesProcessing;
+      if (messagesProcessing === 0 && threadIdle > 0 && isFinite(threadIdle)) {
+        threadIdleTimeout = setTimeout(() => self.close(), threadIdle);
+      }
+    }
+  };
 }
 
 /**
@@ -1601,270 +1920,346 @@ if (isDedicatedWorker()) {
  * and store any context information there.
  */
 export class Connection {
-    private p: MessagePort
-    private messagesProcessing: number = 0
-    public context: any = {}
-    private closed: boolean = false
+  private p: MessagePort;
+  private messagesProcessing: number = 0;
+  public context: any = {};
+  private closed: boolean = false;
 
-    /**
-     * Builds a new connection. You will not need to call this directly in production code as these are made automatically for you
-     * @param p The message port to bind to
-     */
-    constructor(p: MessagePort) {
-        this.p = p
-        this.p.start()
+  /**
+   * Builds a new connection. You will not need to call this directly in production code as these are made automatically for you
+   * @param p The message port to bind to
+   */
+  constructor(p: MessagePort) {
+    this.p = p;
+    this.p.start();
 
-        const oldPostMessage = this.p.postMessage.bind(this.p)
-        this.p.postMessage = (function (message: any, ...args: any[]) {
-            return oldPostMessage(dehydrate(message), ...args)
-        }.bind(this.p) as any)
+    const oldPostMessage = this.p.postMessage.bind(this.p);
+    this.p.postMessage = function (message: any, ...args: any[]) {
+      return oldPostMessage(dehydrate(message), ...args);
+    }.bind(this.p) as any;
 
-        this.p.onmessage = async (e: MessageEvent) => {
-            if (this.closed) {
-                console.error(curThreadId, 'Thread is shutting down but receiving messages!')
-                this.sendError(new Error(`Thread is shutting down!`))
-            }
+    this.p.onmessage = async (e: MessageEvent) => {
+      if (this.closed) {
+        console.error(
+          curThreadId,
+          "Thread is shutting down but receiving messages!",
+        );
+        this.sendError(new Error(`Thread is shutting down!`));
+      }
 
-            if (threadIdleTimeout) {
-                doLogs && console.log(curThreadId, 'Pausing idle timer for thread ' + curThreadId)
-                clearTimeout(threadIdleTimeout)
-                threadIdleTimeout = null
-            }
-            ++this.messagesProcessing
-            ++messagesProcessing
+      if (threadIdleTimeout) {
+        doLogs &&
+          console.log(
+            curThreadId,
+            "Pausing idle timer for thread " + curThreadId,
+          );
+        clearTimeout(threadIdleTimeout);
+        threadIdleTimeout = null;
+      }
+      ++this.messagesProcessing;
+      ++messagesProcessing;
 
-            doLogs && console.log(curThreadId, "Received message", e, `Num messages active: ${this.messagesProcessing}`)
+      doLogs &&
+        console.log(
+          curThreadId,
+          "Received message",
+          e,
+          `Num messages active: ${this.messagesProcessing}`,
+        );
 
-            try {
-                try {
-                    e = {...e, data: hydrate(e.data)}
-                } catch (err) {
-                    console.error('HYDRATION FAILED!', err, e.data)
-                    e = {...e, data: hydrate(e.data)}
-                }
-
-                doLogs && console.log(curThreadId, "Hydrated message", e)
-
-                try {
-                    let res: any = undefined
-
-                    if (typeof e.data === 'object' || typeof e.data === 'function') {
-                        if ('__system' in e.data && e.data.__system) {
-                            doLogs && console.log(curThreadId, "Message is a system event!")
-                            if ('share' in e.data && 'shareId' in e.data) {
-                                if ((self as any).onshare) {
-                                    res = (self as any).onshare(this, {share: e.data.share, message: e.data.message})
-                                } else if ((self as any).onevent) {
-                                    doLogs && console.log(curThreadId, "onshare not found, falling back to onevent");
-                                    res = (self as any).onevent(this, e)
-                                }
-
-                                if (promiseLike(res)) {
-                                    await res
-                                }
-                                this.p.postMessage({__system: true, __shared: e.data.shareId})
-                            } else if ('transfer' in e.data) {
-                                if ((self as any).ontransfer) {
-                                    res = (self as any).ontransfer(this, e.data.message)
-                                } else if ((self as any).onevent) {
-                                    doLogs && console.log(curThreadId, "ontransfer not found, falling back to onevent");
-                                    res = (self as any).onevent(this, e)
-                                }
-
-                                if (promiseLike(res)) {
-                                    await res
-                                }
-                                this.p.postMessage({__system: true, __transferd: e.data.transfer})
-                            } else if ('workId' in e.data && 'work' in e.data) {
-                                if ((self as any).onwork) {
-                                    res = (self as any).onwork(this, e.data.work)
-                                } else if ((self as any).onevent) {
-                                    doLogs && console.log(curThreadId, "onwork not found, falling back to onevent");
-                                    res = (self as any).onevent(this, e)
-                                }
-                                if (promiseLike(res)) {
-                                    res = await res
-                                }
-
-                                if (res instanceof ResponseWithTransfer) {
-                                    this.p.postMessage({
-                                        __system: true,
-                                        threadId: getThreadId(),
-                                        workId: e.data.workId,
-                                        res: res.message,
-                                    }, {transfer: res.transfer})
-                                }
-                                else if (res instanceof ResponseWithOptions) {
-                                    this.p.postMessage({
-                                        __system: true,
-                                        threadId: getThreadId(),
-                                        workId: e.data.workId,
-                                        res: res.message,
-                                    }, res.options)
-                                }
-                                else {
-                                    this.p.postMessage({
-                                        __system: true,
-                                        threadId: getThreadId(),
-                                        workId: e.data.workId,
-                                        res: res
-                                    })
-                                }
-                            } else if ('threadId' in e.data && 'init' in e.data) {
-                                setThreadId(e.data.threadId)
-                                if ((self as any).oninit) {
-                                    (self as any).oninit(this, e.data.init)
-                                } else {
-                                    doLogs && console.log(curThreadId, "oninit not found, skipping custom initialization");
-                                }
-
-                                if (promiseLike(res)) {
-                                    await res
-                                }
-
-                                if ('closeWhenIdle' in e.data && isFinite(e.data.closeWhenIdle)) {
-                                    doLogs && console.log(curThreadId, "idle timeout found! Creating idle timeout");
-                                    threadIdle = e.data.closeWhenIdle
-                                }
-                                this.p.postMessage({__system: true, __initd: true})
-                                doLogs && console.log(curThreadId, 'Thread ready!')
-                            } else if ('__close' in e.data) {
-                                this.close()
-                            } else {
-                                throw new Error('INVALID SYSTEM EVENT!' + JSON.stringify(e.data))
-                            }
-                        } else if ((self as any).onevent) {
-                            doLogs && console.log(curThreadId, "Message is a custom event!");
-                            const res = (self as any).onevent(this, e)
-                            if (promiseLike(res)) {
-                                await res
-                            }
-                        }
-                    } else if ((self as any).onevent) {
-                        doLogs && console.log(curThreadId, "Message is a custom event!");
-                        const res = (self as any).onevent(this, e)
-                        if (promiseLike(res)) {
-                            await res
-                        }
-                    }
-                } catch (err) {
-                    if (e.data && typeof e.data === 'object' && '__system' in e.data) {
-                        if ('workId' in e.data) {
-                            this.p.postMessage({__system: true, threadId: getThreadId(), workId: e.data.workId, rej: err})
-                        } else if ('transfer' in e.data) {
-                            this.p.postMessage({
-                                __system: true,
-                                threadId: getThreadId(),
-                                __transferd: e.data.transfer,
-                                __error: err
-                            })
-                        } else if ('share' in e.data) {
-                            this.p.postMessage({__system: true, threadId: getThreadId(), __shared: e.data.transfer, rej: err})
-                        } else if ('init' in e.data) {
-                            this.p.postMessage({__system: true, threadId: getThreadId(), __initd: false, __error: err})
-                            this.close()
-                        } else if ('__close' in e.data) {
-                            this.sendError(err)
-                            this.close()
-                        }
-                    } else {
-                        this.sendError(err)
-                    }
-                }
-            } finally {
-                --this.messagesProcessing
-                --messagesProcessing
-                if (messagesProcessing === 0 && threadIdle > 0 && isFinite(threadIdle)) {
-                    threadIdleTimeout = setTimeout(() => this.close(), threadIdle)
-                }
-            }
+      try {
+        try {
+          e = { ...e, data: hydrate(e.data) };
+        } catch (err) {
+          console.error("HYDRATION FAILED!", err, e.data);
+          e = { ...e, data: hydrate(e.data) };
         }
 
-        if ((self as any).onconnection) {
-            (self as any).onconnection(this)
-        }
-    }
+        doLogs && console.log(curThreadId, "Hydrated message", e);
 
-    /**
-     * Returns the raw, underlying MessagePort object
-     */
-    public port(): MessagePort {
-        return this.p
-    }
+        try {
+          let res: any = undefined;
 
-    /**
-     * Sends an error to the connected thread
-     * @param err Error to send
-     */
-    public sendError(err: any) {
-        this.p.postMessage({__system: true, __error: err})
-    }
-
-    /**
-     * Sends a message to the connected thread
-     * @param msg Message to send
-     * @param options postMessage options to use
-     */
-    public postMessage(msg: any, options?: any) {
-        this.p.postMessage(msg, options)
-    }
-
-    /**
-     * Transfers ownership of some object to the connected therad
-     * @param message Message to send (should include a way to reference transferred object)
-     * @param items Objects to transfer ownership of
-     */
-    public transfer(message: any, items: Transferable|TransferableFetchers) {
-        if (!Array.isArray(items)) {
-            if (!items) {
-                items = []
-            } else {
-                items = [items]
-            }
-        }
-        this.p.postMessage({__system: true, transfer: true, message}, {transfer: items} as any)
-    }
-
-    /**
-     * Gets the number of outstanding messages being processed from the connected thread
-     * If you want to know about total messages being processed on the shared thread, then use the global {@link numMessagesProcessing}
-     */
-    public numMessagesProcessing(): number {
-        return this.messagesProcessing
-    }
-
-    /**
-     * Closes the connection and disconnects from the connected thread
-     */
-    public close() {
-        this.closed = true
-        new Promise(async (resolve) => {
-            for (let attempt = 0; attempt < 10; ++attempt) {
-                if (this.numMessagesProcessing() > 0) {
-                    await new Promise(r => setTimeout(r, 100))
+          if (typeof e.data === "object" || typeof e.data === "function") {
+            if ("__system" in e.data && e.data.__system) {
+              doLogs && console.log(curThreadId, "Message is a system event!");
+              if ("share" in e.data && "shareId" in e.data) {
+                if ((self as any).onshare) {
+                  res = (self as any).onshare(this, {
+                    share: e.data.share,
+                    message: e.data.message,
+                  });
+                } else if ((self as any).onevent) {
+                  doLogs &&
+                    console.log(
+                      curThreadId,
+                      "onshare not found, falling back to onevent",
+                    );
+                  res = (self as any).onevent(this, e);
                 }
-                else {
-                    break
-                }
-            }
 
-            if (this.numMessagesProcessing() > 0) {
-                console.error('Port not shut down gracefully after 1 second, forcing shutdown')
+                if (promiseLike(res)) {
+                  await res;
+                }
+                this.p.postMessage({
+                  __system: true,
+                  __shared: e.data.shareId,
+                });
+              } else if ("transfer" in e.data) {
+                if ((self as any).ontransfer) {
+                  res = (self as any).ontransfer(this, e.data.message);
+                } else if ((self as any).onevent) {
+                  doLogs &&
+                    console.log(
+                      curThreadId,
+                      "ontransfer not found, falling back to onevent",
+                    );
+                  res = (self as any).onevent(this, e);
+                }
+
+                if (promiseLike(res)) {
+                  await res;
+                }
+                this.p.postMessage({
+                  __system: true,
+                  __transferd: e.data.transfer,
+                });
+              } else if ("workId" in e.data && "work" in e.data) {
+                if ((self as any).onwork) {
+                  res = (self as any).onwork(this, e.data.work);
+                } else if ((self as any).onevent) {
+                  doLogs &&
+                    console.log(
+                      curThreadId,
+                      "onwork not found, falling back to onevent",
+                    );
+                  res = (self as any).onevent(this, e);
+                }
+                if (promiseLike(res)) {
+                  res = await res;
+                }
+
+                if (res instanceof ResponseWithTransfer) {
+                  this.p.postMessage(
+                    {
+                      __system: true,
+                      threadId: getThreadId(),
+                      workId: e.data.workId,
+                      res: res.message,
+                    },
+                    { transfer: res.transfer },
+                  );
+                } else if (res instanceof ResponseWithOptions) {
+                  this.p.postMessage(
+                    {
+                      __system: true,
+                      threadId: getThreadId(),
+                      workId: e.data.workId,
+                      res: res.message,
+                    },
+                    res.options,
+                  );
+                } else {
+                  this.p.postMessage({
+                    __system: true,
+                    threadId: getThreadId(),
+                    workId: e.data.workId,
+                    res: res,
+                  });
+                }
+              } else if ("threadId" in e.data && "init" in e.data) {
+                setThreadId(e.data.threadId);
+                if ((self as any).oninit) {
+                  (self as any).oninit(this, e.data.init);
+                } else {
+                  doLogs &&
+                    console.log(
+                      curThreadId,
+                      "oninit not found, skipping custom initialization",
+                    );
+                }
+
+                if (promiseLike(res)) {
+                  await res;
+                }
+
+                if (
+                  "closeWhenIdle" in e.data &&
+                  isFinite(e.data.closeWhenIdle)
+                ) {
+                  doLogs &&
+                    console.log(
+                      curThreadId,
+                      "idle timeout found! Creating idle timeout",
+                    );
+                  threadIdle = e.data.closeWhenIdle;
+                }
+                this.p.postMessage({
+                  __system: true,
+                  __initd: true,
+                });
+                doLogs && console.log(curThreadId, "Thread ready!");
+              } else if ("__close" in e.data) {
+                this.close();
+              } else {
+                throw new Error(
+                  "INVALID SYSTEM EVENT!" + JSON.stringify(e.data),
+                );
+              }
+            } else if ((self as any).onevent) {
+              doLogs && console.log(curThreadId, "Message is a custom event!");
+              const res = (self as any).onevent(this, e);
+              if (promiseLike(res)) {
+                await res;
+              }
             }
-            this.p.close()
-            resolve(null)
-        })
+          } else if ((self as any).onevent) {
+            doLogs && console.log(curThreadId, "Message is a custom event!");
+            const res = (self as any).onevent(this, e);
+            if (promiseLike(res)) {
+              await res;
+            }
+          }
+        } catch (err) {
+          if (e.data && typeof e.data === "object" && "__system" in e.data) {
+            if ("workId" in e.data) {
+              this.p.postMessage({
+                __system: true,
+                threadId: getThreadId(),
+                workId: e.data.workId,
+                rej: err,
+              });
+            } else if ("transfer" in e.data) {
+              this.p.postMessage({
+                __system: true,
+                threadId: getThreadId(),
+                __transferd: e.data.transfer,
+                __error: err,
+              });
+            } else if ("share" in e.data) {
+              this.p.postMessage({
+                __system: true,
+                threadId: getThreadId(),
+                __shared: e.data.transfer,
+                rej: err,
+              });
+            } else if ("init" in e.data) {
+              this.p.postMessage({
+                __system: true,
+                threadId: getThreadId(),
+                __initd: false,
+                __error: err,
+              });
+              this.close();
+            } else if ("__close" in e.data) {
+              this.sendError(err);
+              this.close();
+            }
+          } else {
+            this.sendError(err);
+          }
+        }
+      } finally {
+        --this.messagesProcessing;
+        --messagesProcessing;
+        if (
+          messagesProcessing === 0 &&
+          threadIdle > 0 &&
+          isFinite(threadIdle)
+        ) {
+          threadIdleTimeout = setTimeout(() => this.close(), threadIdle);
+        }
+      }
+    };
+
+    if ((self as any).onconnection) {
+      (self as any).onconnection(this);
     }
+  }
+
+  /**
+   * Returns the raw, underlying MessagePort object
+   */
+  public port(): MessagePort {
+    return this.p;
+  }
+
+  /**
+   * Sends an error to the connected thread
+   * @param err Error to send
+   */
+  public sendError(err: any) {
+    this.p.postMessage({ __system: true, __error: err });
+  }
+
+  /**
+   * Sends a message to the connected thread
+   * @param msg Message to send
+   * @param options postMessage options to use
+   */
+  public postMessage(msg: any, options?: any) {
+    this.p.postMessage(msg, options);
+  }
+
+  /**
+   * Transfers ownership of some object to the connected therad
+   * @param message Message to send (should include a way to reference transferred object)
+   * @param items Objects to transfer ownership of
+   */
+  public transfer(message: any, items: Transferable | TransferableFetchers) {
+    if (!Array.isArray(items)) {
+      if (!items) {
+        items = [];
+      } else {
+        items = [items];
+      }
+    }
+    this.p.postMessage({ __system: true, transfer: true, message }, {
+      transfer: items,
+    } as any);
+  }
+
+  /**
+   * Gets the number of outstanding messages being processed from the connected thread
+   * If you want to know about total messages being processed on the shared thread, then use the global {@link numMessagesProcessing}
+   */
+  public numMessagesProcessing(): number {
+    return this.messagesProcessing;
+  }
+
+  /**
+   * Closes the connection and disconnects from the connected thread
+   */
+  public close() {
+    this.closed = true;
+    new Promise(async (resolve) => {
+      for (let attempt = 0; attempt < 10; ++attempt) {
+        if (this.numMessagesProcessing() > 0) {
+          await new Promise((r) => setTimeout(r, 100));
+        } else {
+          break;
+        }
+      }
+
+      if (this.numMessagesProcessing() > 0) {
+        console.error(
+          "Port not shut down gracefully after 1 second, forcing shutdown",
+        );
+      }
+      this.p.close();
+      resolve(null);
+    });
+  }
 }
 
 if (isSharedWorker()) {
-    // SharedWorker scope
-    // no custom close this time, trying to sort live/dead connections is unfeasible
+  // SharedWorker scope
+  // no custom close this time, trying to sort live/dead connections is unfeasible
 
-    (self as any).onconnect = (event: MessageEvent) => {
-        // Everything is handled in the connection object
-        // We don't store a reference here, so once all the event handlers are cleaned up the object should be cleaned up too
-        // (unless somebody stores a reference somewhere, then we're in trouble...)
-        new Connection(event.ports[0])
-    }
+  (self as any).onconnect = (event: MessageEvent) => {
+    // Everything is handled in the connection object
+    // We don't store a reference here, so once all the event handlers are cleaned up the object should be cleaned up too
+    // (unless somebody stores a reference somewhere, then we're in trouble...)
+    new Connection(event.ports[0]);
+  };
 }

@@ -1,27 +1,26 @@
 <!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>threads</title>
-    <link rel="stylesheet" href="mocha.css"/>
-</head>
-<body>
+    <link rel="stylesheet" href="mocha.css" />
+  </head>
+  <body>
+    <script src="chai.js"></script>
+    <script src="mocha.js"></script>
+    <script src="/dist/threads.iife.js"></script>
 
-<script src="chai.js"></script>
-<script src="mocha.js"></script>
-<script src="/dist/threads.iife.js"></script>
+    <div id="mocha"></div>
 
-<div id="mocha"></div>
-
-<script class="mocha-init">
-    mocha.setup("bdd");
-    mocha.checkLeaks();
-    var expect = chai.expect
-</script>
-<script src="test.threads.js"></script>
-<script class="mocha-exec">
-    mocha.run();
-</script>
-</body>
+    <script class="mocha-init">
+      mocha.setup("bdd");
+      mocha.checkLeaks();
+      var expect = chai.expect;
+    </script>
+    <script src="test.threads.js"></script>
+    <script class="mocha-exec">
+      mocha.run();
+    </script>
+  </body>
 </html>

@@ -6,25 +6,25 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-importScripts("/dist/threads.iife.js")
-threads.setLogging(true)
+importScripts("/dist/threads.iife.js");
+threads.setLogging(true);
 
 /**
  * @type WaitGroup
  */
-let waitGroup
+let waitGroup;
 
 /**
  * @type Int32Array
  */
-let memory
+let memory;
 
-self.oninit = ({wg, mem}) => {
-    waitGroup = wg
-    memory = mem
-}
+self.oninit = ({ wg, mem }) => {
+  waitGroup = wg;
+  memory = mem;
+};
 
 self.onwork = async (w) => {
-    Atomics.add(memory, 0, w)
-    waitGroup.done()
-}
+  Atomics.add(memory, 0, w);
+  waitGroup.done();
+};

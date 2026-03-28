@@ -6,13 +6,13 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-importScripts("/dist/threads.iife.js")
-threads.setLogging(true)
+importScripts("/dist/threads.iife.js");
+threads.setLogging(true);
 
 self.ontransfer = (conn, message) => {
-    conn.context = message
-}
+  conn.context = message;
+};
 
 self.onevent = async (conn, e) => {
-    conn.postMessage(conn.context.at(0))
-}
+  conn.postMessage(conn.context.at(0));
+};

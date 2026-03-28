@@ -6,37 +6,36 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-importScripts("/dist/threads.iife.js")
-threads.setLogging(true)
+importScripts("/dist/threads.iife.js");
+threads.setLogging(true);
 
 /**
  * @type Mutex
  */
-let mutex
+let mutex;
 
 /**
  * @type ConditionVariable
  */
-let condVar
+let condVar;
 
 /**
  * @type Int32Array
  */
-let memory
+let memory;
 
-self.oninit = ({mux, cv, mem}) => {
-    mutex = mux
-    condVar = cv
-    memory = mem
-}
+self.oninit = ({ mux, cv, mem }) => {
+  mutex = mux;
+  condVar = cv;
+  memory = mem;
+};
 
 self.onwork = async (w) => {
-    await mutex.lockAsync()
-    try {
-        memory.set([12], 0)
-        condVar.notify()
-    }
-    finally {
-        mutex.unlock()
-    }
-}
+  await mutex.lockAsync();
+  try {
+    memory.set([12], 0);
+    condVar.notify();
+  } finally {
+    mutex.unlock();
+  }
+};

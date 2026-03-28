@@ -6,25 +6,25 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-importScripts("/dist/threads.iife.js")
-threads.setLogging(true)
+importScripts("/dist/threads.iife.js");
+threads.setLogging(true);
 
 /**
  * @type Barrier
  */
-let barrier
+let barrier;
 
 /**
  * @type Int32Array
  */
-let memory
+let memory;
 
-self.oninit = ({bar, mem}) => {
-    barrier = bar
-    memory = mem
-}
+self.oninit = ({ bar, mem }) => {
+  barrier = bar;
+  memory = mem;
+};
 
 self.onwork = async (w) => {
-    Atomics.add(memory, 0, w)
-    barrier.wait()
-}
+  Atomics.add(memory, 0, w);
+  barrier.wait();
+};
