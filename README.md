@@ -401,6 +401,34 @@ registerHandler('work', ({buff}) => {
 })
 ```
 
+## SharedThread (SharedWorker equivalent)
+
+Shared threads are also supported. The primary difference is that we don't *spawn* a shared thread, we *connect* to a shared thread.
+
+```ts
+import {registerHandler, SharedThread} from 'peak-threads'
+
+const thread = await SharedThread.connect("shared-worker1.js");
+
+console.log(await thread.sendWork('work to do'))
+```
+
+Like threads, we can send initial data, setup idle closing, and manually close the connection (via `disconnect`). Unlike with `Thread`,
+closing a connection will not destroy the worker, it will only close the connection your code has to the shared worker.
+Be careful, since this can cause resource leaks if you store any data globally or retain references to the connection
+scope past when it's closed!
+
+```ts
+const thread = await SharedThread.connect("shared-worker1.js", {
+    initData: 45, // initial connection data
+    closeWhenIdle: 100, // will close the connection if not used for 100ms
+});
+
+// do some work
+
+thread.disconnect(); // manually closes the connection
+```
+
 ## Advanced Usage
 
 The above examples will cover the most use cases where we're simply spinning some work off in a background thread.
