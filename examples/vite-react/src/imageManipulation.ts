@@ -89,13 +89,14 @@ export function pixelate(imageData: ImageData, blockSize: number) {
             const blockY = remainingY > blockSize ? blockSize : remainingY
 
             // copy into our buffer
-            let counter = 0, redSum = 0, blueSum = 0, greenSum = 0
+            let counter = 0, redSum = 0, blueSum = 0, greenSum = 0, alphaSum = 0
             for (let cx = 0; cx < blockX; ++cx) {
                 for (let cy = 0; cy < blockY; ++cy) {
                     const pixelIndex = ((cy + y) * (imageData.width) + (cx + x)) * 4
                     redSum += imageData.data[pixelIndex + redOffset]
                     greenSum += imageData.data[pixelIndex + greenOffset]
                     blueSum += imageData.data[pixelIndex + blueOffset]
+                    alphaSum += imageData.data[pixelIndex + alphaOffset]
                     ++counter
                 }
             }
@@ -104,6 +105,7 @@ export function pixelate(imageData: ImageData, blockSize: number) {
                 red: Math.floor(redSum / counter),
                 green: Math.floor(greenSum / counter),
                 blue: Math.floor(blueSum / counter),
+                alpha: Math.floor(alphaSum / counter),
             }
 
             if (x < 60)
@@ -117,7 +119,7 @@ export function pixelate(imageData: ImageData, blockSize: number) {
                     imageData.data[pixelIndex + redOffset] = averageColor.red
                     imageData.data[pixelIndex + greenOffset] = averageColor.green
                     imageData.data[pixelIndex + blueOffset] = averageColor.blue
-                    imageData.data[pixelIndex + alphaOffset] = 255
+                    imageData.data[pixelIndex + alphaOffset] = averageColor.alpha
                 }
             }
         }
@@ -138,13 +140,31 @@ export const blurKernel = (window: number) => {
     return arr
 }
 
-export function runWork(work: any) {
+export interface ImageWork {
+    type: string,
+    imageBitmap: ImageBitmap,
+    outWidth: number,
+    action: Algorithm,
+    blurSize?: number,
+    pixelSize?: number
+}
+
+export function runWork(work: ImageWork) {
     // type: 'pixelate_image', buff: imagedata.data, height, width, algorithm
-    const {height, width, buff, colorSpace, outWidth} = work
-    const b = new Uint8ClampedArray(buff)
+    const {imageBitmap, outWidth} = work
+
+    const width = imageBitmap.width
+    const height = imageBitmap.height
+
+    const canvas = new OffscreenCanvas(width, height)
+    const ctx2d = canvas.getContext('2d')!
+    ctx2d.drawImage(imageBitmap, 0, 0)
+    const imageData = ctx2d.getImageData(0, 0, width, height)!
+
+    const b = imageData.data
 
     console.log('processing image...')
-    const orig = new ImageData(b.map(e => e), width, height, {colorSpace})
+    const orig = new ImageData(b.map(e => e), width, height, {colorSpace: imageData.colorSpace})
     const origScaled = downscale(orig.data, orig.width, orig.height, orig.colorSpace, outWidth || 500)
 
     let modified: ImageData
@@ -157,47 +177,47 @@ export function runWork(work: any) {
     else if (action === 'blur') {
         const blurSize = work.blurSize || 7
         const {buff: mbuff, width: mw, height: mh} = applyKernel(origScaled.data, origScaled.width, origScaled.height, blurKernel(blurSize + (blurSize % 2 === 0 ? 1 : 0)))
-        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace})
+        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace: imageData.colorSpace})
     }
     else if (action === 'edge_all') {
         const kernel: number[][] = [[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]]
         const {buff: mbuff, width: mw, height: mh} = applyKernel(origScaled.data, origScaled.width, origScaled.height, kernel)
-        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace})
+        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace: imageData.colorSpace})
     }
     else if (action === 'edge_right') {
         const kernel: number[][] = [[1, 0, -1],[1, 0, -1], [1, 0, -1]]
         const {buff: mbuff, width: mw, height: mh} = applyKernel(origScaled.data, origScaled.width, origScaled.height, kernel)
-        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace})
+        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace: imageData.colorSpace})
     }
     else if (action === 'edge_left') {
         const kernel: number[][] = [[-1, 0, 1],[-1, 0, 1], [-1, 0, 1]]
         const {buff: mbuff, width: mw, height: mh} = applyKernel(origScaled.data, origScaled.width, origScaled.height, kernel)
-        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace})
+        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace: imageData.colorSpace})
     }
     else if (action === 'edge_up') {
         const kernel: number[][] = [[-1, -1, -1],[0, 0, 0], [1, 1, 1]]
         const {buff: mbuff, width: mw, height: mh} = applyKernel(origScaled.data, origScaled.width, origScaled.height, kernel)
-        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace})
+        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace: imageData.colorSpace})
     }
     else if (action === 'edge_down') {
         const kernel: number[][] = [[1, 1, 1],[0, 0, 0], [-1, -1, -1]]
         const {buff: mbuff, width: mw, height: mh} = applyKernel(origScaled.data, origScaled.width, origScaled.height, kernel)
-        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace})
+        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace: imageData.colorSpace})
     }
     else if (action === 'sharpen') {
         const kernel: number[][] = [[0, -1, 0], [-1, 5, -1], [0, -1, 0]]
         const {buff: mbuff, width: mw, height: mh} = applyKernel(origScaled.data, origScaled.width, origScaled.height, kernel)
-        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace})
+        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace: imageData.colorSpace})
     }
     else if (action === 'emboss') {
         const kernel: number[][] = [[-2, -1, 0], [-1, 1, 1], [0, 1, 2]]
         const {buff: mbuff, width: mw, height: mh} = applyKernel(origScaled.data, origScaled.width, origScaled.height, kernel)
-        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace})
+        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace: imageData.colorSpace})
     }
     else if (action === 'emphasis') {
         const kernel: number[][] = [[-0.75, -0.75, -0.75], [-0.75, 7.5, -0.75], [-0.75, -0.75, -0.75]]
         const {buff: mbuff, width: mw, height: mh} = applyKernel(origScaled.data, origScaled.width, origScaled.height, kernel)
-        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace})
+        modified = new ImageData(mbuff as ImageDataArray, mw, mh, {colorSpace: imageData.colorSpace})
     }
     else if (action === 'original') {
         modified = origScaled
@@ -205,7 +225,16 @@ export function runWork(work: any) {
     else {
         throw new Error('UNKNOWN action ON IMAGE!', action)
     }
-    return modified
+
+    const resCanvas = new OffscreenCanvas(modified.width, modified.height)
+    const resCtx = resCanvas.getContext('2d')!
+    resCtx.putImageData(modified, 0, 0)
+    const newBitmap = resCanvas.transferToImageBitmap()
+
+    return {
+        orig: imageBitmap,
+        result: newBitmap
+    }
 }
 
 export interface Pixel {
@@ -225,7 +254,7 @@ export interface KernelOptions {
 export type Kernel = Array<Array<number>> | Array<Array<Pixel>>
 
 export function applyKernel(data: Uint8ClampedArray, width: number, height: number, kernel: Kernel, options?: KernelOptions) {
-    const edgeHandling = options?.boundaryResolve || 'grey'
+    const edgeHandling = options?.boundaryResolve || 'wrap'
     if (kernel.length % 2 === 0 || kernel[0].length % 2 === 0) {
         console.error('INVALIID KERNEL! MUST BE ODD SIZE')
         return {buff: data, width, height}
@@ -362,7 +391,7 @@ export function applyKernel(data: Uint8ClampedArray, width: number, height: numb
             out[outIndex + redOffset] += Math.floor( r)
             out[outIndex + greenOffset] += Math.floor( g)
             out[outIndex + blueOffset] += Math.floor( b)
-            out[outIndex + alphaOffset] = 255
+            out[outIndex + alphaOffset] += Math.floor(a)
         }
     }
 

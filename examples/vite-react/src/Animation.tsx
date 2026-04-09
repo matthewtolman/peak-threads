@@ -44,7 +44,9 @@ export function Animation() {
 
             // update the animation after a delay
             new Promise(r => {
-                setFrame(frame + 0.06)
+                requestAnimationFrame(() => {
+                    setFrame(frame + 1.5)
+                })
                 r(null)
             })
         };
@@ -52,7 +54,7 @@ export function Animation() {
         return () => {
             window.cancelAnimationFrame(animationFrameId);
         };
-    }, [draw, context, setFrame, frame]);
+    }, [context, setFrame, frame]);
 
     return <canvas ref={canvasRef} width={width} height={height} style={{border: '1px solid black'}}></canvas>
 }

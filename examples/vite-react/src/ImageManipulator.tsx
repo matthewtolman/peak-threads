@@ -20,46 +20,15 @@ export type Algorithm =
     | 'emphasis'
     | 'original'
 
-async function processImage(pool: ThreadPool|undefined, loadCanvas: HTMLCanvasElement, setProcessing: (_: boolean) => void,
+async function processImage(pool: ThreadPool | undefined, imageBitmap: ImageBitmap, setImageBitmap: (imb: ImageBitmap) => void, setProcessing: (_: boolean) => void,
                             modifiedCanvas: HTMLCanvasElement, algorithm: Algorithm) {
     setProcessing(true)
-    const width = loadCanvas.width
-    const height = loadCanvas.height
     try {
-        const buff = new Uint8ClampedArray(new ArrayBuffer(width * height * Uint8ClampedArray.BYTES_PER_ELEMENT * 4))
-
-        await yieldThread()
-
-        let colorSpace
-
-        const yieldEveryNRows = 3
-
-        const loadCanvasContext = loadCanvas.getContext('2d', {alpha: false})!
-
-        for (let row = 0; row < height; row++) {
-            const rowData = loadCanvasContext.getImageData(0, row, width, 1)
-            colorSpace = rowData.colorSpace
-
-            if (row % yieldEveryNRows === yieldEveryNRows - 1) {
-                await yieldThread()
-            }
-            const rowIndex = (row) * (width * Uint8ClampedArray.BYTES_PER_ELEMENT * 4)
-            for (let col = 0; col < width; col++) {
-                const colOffset = col * Uint8ClampedArray.BYTES_PER_ELEMENT * 4
-                buff[rowIndex + colOffset + 0] = rowData.data[colOffset + 0]
-                buff[rowIndex + colOffset + 1] = rowData.data[colOffset + 1]
-                buff[rowIndex + colOffset + 2] = rowData.data[colOffset + 2]
-                buff[rowIndex + colOffset + 3] = rowData.data[colOffset + 3]
-            }
-        }
         console.log('processing')
 
         const params: any = {
             type: 'pixelate_image',
-            buff: buff.buffer,
-            height,
-            width,
-            colorSpace: colorSpace,
+            imageBitmap,
             outWidth: 1300,
             action: algorithm
         }
@@ -70,30 +39,28 @@ async function processImage(pool: ThreadPool|undefined, loadCanvas: HTMLCanvasEl
             params.pixelSize = 20
         }
 
-        let m: any
+        let m: ImageBitmap
 
         if (pool) {
-            m = await pool.sendWork(params, {transfer: [buff.buffer]})
+            const {orig, result} = await pool.sendWork(params, {transfer: [imageBitmap]})
+            m = result
+            setImageBitmap(orig)
+        } else {
+            const {result} = runWork(params)
+            m = result
         }
-        else {
-            m = runWork(params)
-        }
-
-        const modifiedData = new Uint8ClampedArray(m.data)
 
         console.log('receiving')
 
-        const mImage = new ImageData(modifiedData, m.width, m.height, {colorSpace: colorSpace})
-        await yieldThread()
+        modifiedCanvas.width = m.width
+        modifiedCanvas.height = m.height
 
-        console.log('rendering')
-
-        await yieldThread()
-
-        modifiedCanvas.width = mImage.width
-        modifiedCanvas.height = mImage.height
-        const modifiedContext = modifiedCanvas.getContext('2d', {alpha: false})!
-        modifiedContext.putImageData(mImage, 0, 0)
+        requestAnimationFrame(() => {
+            const ctx2d = modifiedCanvas.getContext('2d')!
+            ctx2d.fillStyle = 'white'
+            ctx2d.fillRect(0, 0, modifiedCanvas.width, modifiedCanvas.height)
+            ctx2d.drawImage(m, 0, 0)
+        })
 
     } finally {
         await yieldThread()
@@ -107,64 +74,34 @@ export interface Props {
 
 export const ImageManipulator = ({usePool}: Props) => {
     const selectedImageInputRef = useRef<HTMLInputElement>(null)
-    const fileRef = useRef<Blob>(null)
-    const blobRef = useRef<string | ArrayBuffer | null | undefined>(null)
-    const loadCanvasRef = useRef<HTMLCanvasElement>(null)
     const modifiedCanvasRef = useRef<HTMLCanvasElement>(null)
-    const loadCanvasContextRef = useRef<CanvasRenderingContext2D>(null)
-    const imageRef = useRef<HTMLImageElement>(null)
     const pool = useContext(PoolContext)
 
     const [processing, setProcessing] = useState<boolean>(false)
     const [hasImage, setHasImage] = useState(false)
     const [action, setAction] = useState<Algorithm>('original')
-
-    const image = {
-        create: (src: string | ArrayBuffer | null | undefined) => {
-            const source = !src ? imageRef!.current!.src : src;
-            const newImage = new Image()
-            newImage.src = source as string
-            newImage.onload = async () => {
-                setProcessing(true)
-                imageRef.current = newImage
-
-                const {width, height} = newImage
-
-                loadCanvasRef.current!.width = width
-                loadCanvasRef.current!.height = height
-
-                console.log('loading')
-                loadCanvasContextRef.current = loadCanvasRef.current!.getContext('2d', {
-                    alpha: false,
-                    willReadFrequently: true
-                })
-                loadCanvasContextRef.current!.drawImage(newImage, 0, 0)
-
-                setHasImage(true)
-                processImage(usePool ? pool : undefined, loadCanvasRef.current!, setProcessing, modifiedCanvasRef.current!, action)
-            }
-        }
-    }
+    const [imageBitmap, setImageBitmap] = useState<ImageBitmap | null>(null)
 
     useEffect(() => {
         if (hasImage) {
-            processImage(usePool ? pool : undefined, loadCanvasRef.current!, setProcessing, modifiedCanvasRef.current!, action)
+            processImage(usePool ? pool : undefined, imageBitmap!, setImageBitmap, setProcessing, modifiedCanvasRef.current!, action)
         }
     }, [pool, hasImage, action])
 
     const file = {
-        read: (chosenFile: Blob) => {
-            const fileReader = new FileReader()
-            fileReader.onloadend = event => {
-                fileRef.current = chosenFile
-                blobRef.current = event.target?.result
-                image.create(blobRef.current)
-            }
-            try {
-                fileReader.readAsDataURL(chosenFile)
-            } catch {
-                // No file
-            }
+        read: async (chosenFile: Blob) => {
+            await new Promise(r => requestAnimationFrame(() => {
+                const ctx2d = modifiedCanvasRef.current!.getContext('2d')!
+                ctx2d.fillStyle = 'white'
+                ctx2d.fillRect(0, 0, modifiedCanvasRef.current!.width, modifiedCanvasRef.current!.height)
+                r(null)
+            }))
+
+            const bitmap = await createImageBitmap(chosenFile)
+            setImageBitmap(bitmap)
+            setProcessing(true)
+            setHasImage(true)
+            await processImage(usePool ? pool : undefined, bitmap, setImageBitmap, setProcessing, modifiedCanvasRef.current!, action)
         }
     }
 
@@ -317,6 +254,5 @@ export const ImageManipulator = ({usePool}: Props) => {
                 }}></div>
             </div>
         </div>
-        <canvas style={{display: 'none'}} ref={loadCanvasRef}/>
     </>
 }

@@ -9,15 +9,14 @@ registerHandler('work', (work: any) => {
     else if (work.type === 'pixelate_image') {
         console.log('received image')
 
-        const modified = runWork(work)
+        const {orig, result} = runWork(work)
 
         console.log('sending back image...')
         return new ResponseWithTransfer(
             {
-                data: modified.data.buffer,
-                width: modified.width,
-                height: modified.height,
+                orig,
+                result,
             }
-        , [modified.data.buffer])
+        , [orig, result])
     }
 })
