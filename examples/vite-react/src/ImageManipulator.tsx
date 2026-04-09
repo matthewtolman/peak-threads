@@ -90,6 +90,10 @@ export const ImageManipulator = ({usePool}: Props) => {
 
     const file = {
         read: async (chosenFile: Blob) => {
+            if (!chosenFile) {
+                // user cancelled
+                return
+            }
             await new Promise(r => requestAnimationFrame(() => {
                 const ctx2d = modifiedCanvasRef.current!.getContext('2d')!
                 ctx2d.fillStyle = 'white'
@@ -106,6 +110,9 @@ export const ImageManipulator = ({usePool}: Props) => {
     }
 
     const handleFile = (event: any = {}) => {
+        if (!event.target.files || !event.target.files.length) {
+            return
+        }
         const [source] = event.target.files
         file.read(source)
     }
