@@ -157,7 +157,7 @@ export function runWork(work: ImageWork) {
     const height = imageBitmap.height
 
     const canvas = new OffscreenCanvas(width, height)
-    const ctx2d = canvas.getContext('2d')!
+    const ctx2d = canvas.getContext('2d', { alpha: false })!
     ctx2d.drawImage(imageBitmap, 0, 0)
     const imageData = ctx2d.getImageData(0, 0, width, height)!
 
@@ -227,7 +227,7 @@ export function runWork(work: ImageWork) {
     }
 
     const resCanvas = new OffscreenCanvas(modified.width, modified.height)
-    const resCtx = resCanvas.getContext('2d')!
+    const resCtx = resCanvas.getContext('2d', { alpha: false })!
     resCtx.putImageData(modified, 0, 0)
     const newBitmap = resCanvas.transferToImageBitmap()
 
@@ -254,7 +254,7 @@ export interface KernelOptions {
 export type Kernel = Array<Array<number>> | Array<Array<Pixel>>
 
 export function applyKernel(data: Uint8ClampedArray, width: number, height: number, kernel: Kernel, options?: KernelOptions) {
-    const edgeHandling = options?.boundaryResolve || 'wrap'
+    const edgeHandling = options?.boundaryResolve || "grey"
     if (kernel.length % 2 === 0 || kernel[0].length % 2 === 0) {
         console.error('INVALIID KERNEL! MUST BE ODD SIZE')
         return {buff: data, width, height}
@@ -391,7 +391,7 @@ export function applyKernel(data: Uint8ClampedArray, width: number, height: numb
             out[outIndex + redOffset] += Math.floor( r)
             out[outIndex + greenOffset] += Math.floor( g)
             out[outIndex + blueOffset] += Math.floor( b)
-            out[outIndex + alphaOffset] += Math.floor(a)
+            out[outIndex + alphaOffset] = 255
         }
     }
 
