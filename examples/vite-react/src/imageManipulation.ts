@@ -254,26 +254,17 @@ export interface KernelOptions {
 export type Kernel = Array<Array<number>> | Array<Array<Pixel>>
 
 export function applyKernel(data: Uint8ClampedArray, width: number, height: number, kernel: Kernel, options?: KernelOptions) {
-    const edgeHandling = options?.boundaryResolve || "grey"
+    const edgeHandling = options?.boundaryResolve || "white"
     if (kernel.length % 2 === 0 || kernel[0].length % 2 === 0) {
         console.error('INVALIID KERNEL! MUST BE ODD SIZE')
         return {buff: data, width, height}
     }
 
-    let offX = Math.floor(kernel.length / 2)
-    let offY = Math.floor(kernel.length / 2)
+    const offX = Math.floor(kernel.length / 2)
+    const offY = Math.floor(kernel.length / 2)
 
     let outWidth = width
-    if (edgeHandling === 'crop') {
-        outWidth -= offX * 2
-        offX = 0
-    }
-
     let outHeight = height
-    if (edgeHandling === 'crop') {
-        outHeight -= offY * 2
-        offY = 0
-    }
 
     for (let ky = 0; ky < kernel.length; ++ky) {
         for (let kx = 0; kx < kernel.length; ++kx) {
@@ -341,6 +332,7 @@ export function applyKernel(data: Uint8ClampedArray, width: number, height: numb
                                 a += kernel[ky][kx].a * data[inIndex + alphaOffset]
                                 break;
                             }
+                            case "crop":
                             case "grey":
                                 r += kernel[ky][kx].r * 128
                                 g += kernel[ky][kx].g * 128
@@ -395,7 +387,29 @@ export function applyKernel(data: Uint8ClampedArray, width: number, height: numb
         }
     }
 
-    return {buff: out, width: outWidth, height: outHeight}
+    if (edgeHandling !== 'crop') {
+        return {buff: out, width: outWidth, height: outHeight}
+    }
+    else {
+        const croppedWidth = outWidth - offX * 2
+        const croppedHeight = outHeight - offY * 2
+        const croppedOut = new Uint8ClampedArray(new ArrayBuffer((croppedWidth) * (croppedHeight) * Uint8ClampedArray.BYTES_PER_ELEMENT * 4))
+
+        for (let x = 0; x < croppedWidth; ++x) {
+            for (let y = 0; y < croppedHeight; ++y) {
+                const croppedIndex = y * (croppedWidth * 4) + x * 4
+                const outIndex = (y + offY) * (width * 4) + (x + offX) * 4
+                croppedOut[croppedIndex + redOffset] = out[outIndex + redOffset]
+                croppedOut[croppedIndex + greenOffset] = out[outIndex + greenOffset]
+                croppedOut[croppedIndex + blueOffset] = out[outIndex + blueOffset]
+                croppedOut[croppedIndex + alphaOffset] = out[outIndex + alphaOffset]
+            }
+        }
+
+        return {
+            buff: croppedOut, width: croppedWidth, height: croppedHeight
+        }
+    }
 }
 
 export function iterateWindow(imageData: Uint8ClampedArray, width: number, height: number, callback: (window: Array<Array<Pixel>>) => Pixel, options?: WindowOptions) {
