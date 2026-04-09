@@ -17,6 +17,7 @@ export function Montecarlo({usePool}: Props) {
             onClick={
                 async () => {
                     setRunning(true)
+                    setResult(0)
                     if (usePool) {
                         setResult(await pool.sendWork({type: 'montecarlo'}))
                     }
