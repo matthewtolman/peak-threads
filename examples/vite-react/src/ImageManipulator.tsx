@@ -129,6 +129,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                 <section>
                     <h3>Image</h3>
                     <input
+                        disabled={processing}
                         accept={'image/*'}
                         style={{display: 'none'}}
                         onChange={handleFile}
@@ -140,7 +141,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                 <section style={{margin: "0 1em"}}>
                     <h3>Image Filter</h3>
                     <div>
-                        <input type={"radio"} id={'original'} checked={action === 'original'} name={"action"}
+                        <input disabled={processing} type={"radio"} id={'original'} checked={action === 'original'} name={"action"}
                                onChange={() => {
                                    setAction('original')
                                }}/>
@@ -148,7 +149,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                     </div>
 
                     <div>
-                        <input type={"radio"} id={'emphasis'} checked={action === 'emphasis'} name={"action"}
+                        <input disabled={processing} type={"radio"} id={'emphasis'} checked={action === 'emphasis'} name={"action"}
                                onChange={() => {
                                    setAction('emphasis')
                                }}/>
@@ -156,14 +157,14 @@ export const ImageManipulator = ({usePool}: Props) => {
                     </div>
 
                     <div>
-                        <input type={"radio"} id={'blur'} checked={action === 'blur'} name={"action"} onChange={() => {
+                        <input disabled={processing} type={"radio"} id={'blur'} checked={action === 'blur'} name={"action"} onChange={() => {
                             setAction('blur')
                         }}/>
                         <label htmlFor={'blur'}>Blur</label>
                     </div>
 
                     <div>
-                        <input type={"radio"} id='pixelate' checked={action === 'pixelate'} name={"action"}
+                        <input disabled={processing} type={"radio"} id='pixelate' checked={action === 'pixelate'} name={"action"}
                                onChange={() => {
                                    setAction('pixelate')
                                }}/>
@@ -171,7 +172,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                     </div>
 
                     <div>
-                        <input type={"radio"} id='emboss' checked={action === 'emboss'} name={"action"}
+                        <input disabled={processing} type={"radio"} id='emboss' checked={action === 'emboss'} name={"action"}
                                onChange={() => {
                                    setAction('emboss')
                                }}/>
@@ -179,7 +180,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                     </div>
 
                     <div>
-                        <input type={"radio"} id='sharpen' checked={action === 'sharpen'} name={"action"}
+                        <input disabled={processing} type={"radio"} id='sharpen' checked={action === 'sharpen'} name={"action"}
                                onChange={() => {
                                    setAction('sharpen')
                                }}/>
@@ -190,7 +191,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                     <h3>Edge Detection</h3>
 
                     <div>
-                        <input type={"radio"} id='edge_all' checked={action === 'edge_all'} name={"action"}
+                        <input disabled={processing} type={"radio"} id='edge_all' checked={action === 'edge_all'} name={"action"}
                                onChange={() => {
                                    setAction('edge_all')
                                }}/>
@@ -198,7 +199,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                     </div>
 
                     <div>
-                        <input type={"radio"} id='edge_left' checked={action === 'edge_left'} name={"action"}
+                        <input disabled={processing} type={"radio"} id='edge_left' checked={action === 'edge_left'} name={"action"}
                                onChange={() => {
                                    setAction('edge_left')
                                }}/>
@@ -206,7 +207,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                     </div>
 
                     <div>
-                        <input type={"radio"} id='edge_right' checked={action === 'edge_right'} name={"action"}
+                        <input disabled={processing} type={"radio"} id='edge_right' checked={action === 'edge_right'} name={"action"}
                                onChange={() => {
                                    setAction('edge_right')
                                }}/>
@@ -214,7 +215,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                     </div>
 
                     <div>
-                        <input type={"radio"} id='edge_up' checked={action === 'edge_up'} name={"action"}
+                        <input disabled={processing} type={"radio"} id='edge_up' checked={action === 'edge_up'} name={"action"}
                                onChange={() => {
                                    setAction('edge_up')
                                }}/>
@@ -222,7 +223,7 @@ export const ImageManipulator = ({usePool}: Props) => {
                     </div>
 
                     <div>
-                        <input type={"radio"} id='edge_down' checked={action === 'edge_down'} name={"action"}
+                        <input disabled={processing} type={"radio"} id='edge_down' checked={action === 'edge_down'} name={"action"}
                                onChange={() => {
                                    setAction('edge_down')
                                }}/>
