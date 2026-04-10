@@ -44,3 +44,17 @@ export {
   type BigIntTypedArray,
 } from "./types.ts";
 export { registerHandler, registerSharedHandler } from "./registerHandler.ts";
+export {
+  BadMessageError,
+  NotInWorkerThread,
+  BadResponseError,
+  ThreadSpawnFailedError,
+  BadDeHydrationError,
+  ThreadPoolClosedError,
+  NoWaitAsyncError,
+  InvalidMemoryLayoutError,
+  MemoryNotAtomicError,
+  OutOfBoundsError,
+  InvalidAddressError,
+  ThreadClosedError,
+} from "./errors.ts";

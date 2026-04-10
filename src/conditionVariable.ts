@@ -9,6 +9,7 @@
 import type { ElementLayout } from "./types.ts";
 import { Address, type DehydratedAddress, make } from "./memory.ts";
 import { Mutex } from "./mutex.ts";
+import { InvalidAddressError, NoWaitAsyncError } from "./errors.ts";
 
 export interface DehydratedConditionVariable {
   addr: DehydratedAddress<Int32Array>;
@@ -35,9 +36,7 @@ export class ConditionVariable {
    */
   constructor(address: Address<Int32Array>) {
     if (address.count() < 2) {
-      throw new Error(
-        `Invalid address for Condition Variable! MUST BE AT LEAST 2 ELEMENTS WIDE!`,
-      );
+      throw new InvalidAddressError(2, "INT32");
     }
     this.addr = address;
     this.prevOffset = address.offset();
@@ -111,7 +110,7 @@ export class ConditionVariable {
    */
   public async waitAsync(mux: Mutex, timeout: number = Infinity) {
     if (!("waitAsync" in Atomics)) {
-      throw new Error("waitAsync not available!");
+      throw new NoWaitAsyncError();
     }
     const start = Date.now();
     const val = this.addr.atomicLoad(this.valOffset);

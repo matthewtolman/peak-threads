@@ -8,6 +8,7 @@
 
 import type { ElementLayout } from "./types.ts";
 import { Address, type DehydratedAddress, make } from "./memory.ts";
+import { NoWaitAsyncError } from "./errors.ts";
 
 export interface DehydratedSemaphore {
   addr: DehydratedAddress<Int32Array>;
@@ -120,7 +121,7 @@ export class Semaphore {
    */
   public async acquireAsync(timeout: number = Infinity) {
     if (!("waitAsync" in Atomics)) {
-      throw new Error("waitAsync not available!");
+      throw new NoWaitAsyncError();
     }
     let lastTime = Date.now();
     do {

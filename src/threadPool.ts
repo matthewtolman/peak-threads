@@ -7,6 +7,11 @@
  */
 
 import { Thread } from "./thread.ts";
+import {
+  ThreadClosedError,
+  ThreadPoolClosedError,
+  ThreadSpawnFailedError,
+} from "./errors.ts";
 
 export interface ThreadPoolOptions {
   /**
@@ -240,13 +245,7 @@ export class ThreadPool {
 
   private async selectThread(): Promise<Thread> {
     let attempt = 0;
-    let skipWait = false;
-    const maxAttempts = this.options?.queueRetries || 5;
-    while (attempt++ < maxAttempts) {
-      if (attempt !== 1 && !skipWait) {
-        await new Promise((w) => setTimeout(() => w(null), 2 * attempt));
-      }
-      skipWait = false;
+    while (true) {
       try {
         const canGrow = this.lastLive < this.maxThreads;
         let readyThreads = [];
@@ -262,14 +261,21 @@ export class ThreadPool {
 
         if (readyThreads.length === 0) {
           if (readyThreads.length === 0 && canGrow) {
-            return await this.growPool();
+            const t = await this.growPool();
+            t.poolClaim();
+            return t;
           }
         }
 
         const action = this.schedulerStrategy(readyThreads, canGrow);
         if (action === "grow" && canGrow) {
-          return await this.growPool();
+          const t = await this.growPool();
+          t.poolClaim();
+          return t;
         } else if (action === null || !action || !(action instanceof Thread)) {
+          await new Promise((w) =>
+            setTimeout(() => w(null), Math.min(2 * ++attempt, 20)),
+          );
           continue;
         } else {
           action.poolClaim();
@@ -277,17 +283,8 @@ export class ThreadPool {
         }
       } catch (e) {
         console.error("Encountered error when trying to queue work", e);
-        if (attempt >= maxAttempts) {
-          throw new Error(
-            `Could not find an available thread after ${maxAttempts} attempts!`,
-            { cause: e },
-          );
-        }
       }
     }
-    throw new Error(
-      `Could not find an available thread after ${maxAttempts} attempts!`,
-    );
   }
 
   /**
@@ -297,25 +294,29 @@ export class ThreadPool {
    */
   public async sendWork(work: any, options?: StructuredSerializeOptions) {
     const maxAttempts = this.options?.queueRetries || 5;
+    if (this.closed) {
+      throw new ThreadPoolClosedError();
+    }
     for (let i = 0; i < maxAttempts; ++i) {
-      if (this.closed) {
-        throw new Error("Cannot send work, pool is closed!");
-      }
       const thread = await this.selectThread();
       if (this.closed) {
-        throw new Error("Cannot send work, pool is closed!");
+        throw new ThreadPoolClosedError();
       }
 
       // we only retry if sending the work failed (usually happens when we send to a dead thread)
       try {
         return await thread.sendWork(work, options);
       } catch (e: any) {
+        // cannot retry, data is lost!
+        if (options?.transfer) {
+          throw e;
+        }
         if (
-          e &&
-          e.message &&
-          typeof e.message === "string" &&
-          (e.message === "Thread stopped running!" ||
-            e.message === "Thread is shutting down!")
+          e instanceof ThreadClosedError ||
+          (e &&
+            e.message &&
+            typeof e.message === "string" &&
+            e.message === "Thread Closed")
         ) {
           // wait for threads to clean up and try again
           // Note: for this loop we only retry if we send to a dead/dying thread, not for any other errors
@@ -389,7 +390,7 @@ export class ThreadPool {
       return this.threads[threadObj.indx].thread;
     } catch (e) {
       close();
-      throw new Error("COULD NOT SPAWN THREAD", { cause: e });
+      throw new ThreadSpawnFailedError(e);
     }
   }
 }

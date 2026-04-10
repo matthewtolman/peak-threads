@@ -12,6 +12,14 @@ import { Address } from "./memory.ts";
 import { WaitGroup } from "./waitGroup.ts";
 import { Barrier } from "./barrier.ts";
 import { Semaphore } from "./semaphore.ts";
+import {
+  BadDeHydrationError,
+  BadMessageError,
+  BadResponseError,
+  NotInWorkerThread,
+  ThreadClosedError,
+  ThreadSpawnFailedError,
+} from "./errors.ts";
 
 let curThreadId = "main";
 let incThreadId = 0;
@@ -134,7 +142,12 @@ const dehydrationList: Array<DehydrationClass | DehydrationFunctions> = [
       cause: unknown | undefined;
     }) => {
       console.error(value);
-      let e = new Error(value.message, { cause: value.cause });
+      let e: Error;
+      if (value.message === "Thread Closed") {
+        e = new ThreadClosedError({ cause: value.cause });
+      } else {
+        e = new Error(value.message, { cause: value.cause });
+      }
       e.stack = value.stack;
       console.error(e);
       return e;
@@ -163,24 +176,28 @@ export function registerDeHydration(
       ("isa" in ruleset && "dehydrate" in ruleset && "hydrate in ruleset")
     )
   ) {
-    throw new Error("Bad DeHydration registration!");
+    throw new BadDeHydrationError(
+      "Invalid request type! Should be one of DehydrationFunctions or DehydrationClass",
+    );
   }
 
   if ("type" in ruleset) {
     if (!("dehydrate" in ruleset.type && "hydrate" in ruleset.type)) {
-      throw new Error(
+      throw new BadDeHydrationError(
         'Missing static methods "dehydrate" and "hydrate" on type! ' +
           ruleset.type,
       );
     }
   } else if (!ruleset.isa || !ruleset.dehydrate || !ruleset.hydrate) {
-    throw new Error(
+    throw new BadDeHydrationError(
       'Need to have the fields "isa", "dehydrate" and "hydrate" all defined',
     );
   }
 
   if (dehydrationKeys.has(ruleset.key)) {
-    throw new Error(`DeHydration with key '${ruleset}' already registered!`);
+    throw new BadDeHydrationError(
+      `DeHydration with key '${ruleset}' already registered!`,
+    );
   }
 
   dehydrationKeys.add(ruleset.key);
@@ -616,7 +633,7 @@ export class Thread {
                   );
                 res(e.data.res);
               } else {
-                rej(e.data.rej || new Error("Bad response from worker thread"));
+                rej(e.data.rej || new BadResponseError());
               }
             } finally {
               delete this.workQueue[e.data.workId];
@@ -628,7 +645,7 @@ export class Thread {
           if (e.data.__initd) {
             res();
           } else {
-            rej(e.data.__error || new Error("Initialization Failed!"));
+            rej(new ThreadSpawnFailedError(e.data.__error));
             this.worker.terminate();
             this.killed = true;
           }
@@ -667,7 +684,7 @@ export class Thread {
           }
           return;
         } else {
-          throw new Error("INVALID SYSTEM EVENT!");
+          throw new BadResponseError();
         }
       } else if (this.handler) {
         doLogs &&
@@ -796,7 +813,7 @@ export class Thread {
     options?: StructuredSerializeOptions,
   ): Promise<R> {
     if (this.killed) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     const workId = this.nextWorkId();
     doLogs &&
@@ -828,7 +845,7 @@ export class Thread {
    */
   public sendEvent(event: any, options?: StructuredSerializeOptions): void {
     if (this.killed) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     doLogs &&
       console.log(
@@ -845,7 +862,7 @@ export class Thread {
    */
   public raw() {
     if (this.killed) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     return this.worker;
   }
@@ -864,7 +881,7 @@ export class Thread {
     options?: StructuredSerializeOptions,
   ): Promise<void> {
     if (this.killed) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     const shareId = this.nextWorkId();
     ++this.pending;
@@ -900,7 +917,7 @@ export class Thread {
    */
   public transfer(message: any, items: any[]): Promise<void> {
     if (this.killed) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     if (!Array.isArray(items)) {
       if (!items) {
@@ -957,7 +974,7 @@ export class Thread {
   private closeThread() {
     this.killed = true;
     for (const { rej } of Object.values(this.workQueue)) {
-      rej(new Error("Thread stopped running!"));
+      rej(new ThreadClosedError());
     }
     if (this.closeHandler) {
       this.closeHandler(this);
@@ -1140,7 +1157,7 @@ export class SharedThread {
                   );
                 res(e.data.res);
               } else {
-                rej(e.data.rej || new Error("Bad response from worker thread"));
+                rej(e.data.rej || new BadResponseError());
               }
             } finally {
               delete this.workQueue[e.data.workId];
@@ -1152,7 +1169,7 @@ export class SharedThread {
           if (e.data.__initd) {
             res();
           } else {
-            rej(e.data.__error || new Error("Initialization Failed!"));
+            rej(new ThreadSpawnFailedError(e.data.__error));
             this.worker.port.close();
             this.disconnected = true;
           }
@@ -1191,7 +1208,7 @@ export class SharedThread {
           }
           return;
         } else {
-          throw new Error("INVALID SYSTEM EVENT!");
+          throw new BadResponseError();
         }
       } else if (this.handler) {
         doLogs &&
@@ -1294,7 +1311,7 @@ export class SharedThread {
     options?: StructuredSerializeOptions | ResponseOptions,
   ): Promise<R> {
     if (this.disconnected) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     const workId = this.nextWorkId();
     doLogs &&
@@ -1326,7 +1343,7 @@ export class SharedThread {
    */
   public sendEvent(event: any, options?: StructuredSerializeOptions): void {
     if (this.disconnected) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     doLogs &&
       console.log(
@@ -1350,7 +1367,7 @@ export class SharedThread {
    */
   public raw() {
     if (this.disconnected) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     return this.worker;
   }
@@ -1369,7 +1386,7 @@ export class SharedThread {
     options?: StructuredSerializeOptions,
   ): Promise<void> {
     if (this.disconnected) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     const shareId = this.nextWorkId();
     ++this.pending;
@@ -1408,7 +1425,7 @@ export class SharedThread {
     items: Transferable | TransferableFetchers,
   ): Promise<void> {
     if (this.disconnected) {
-      throw new Error("Invalid Operation! Thread is stopped!");
+      throw new ThreadClosedError();
     }
     if (!Array.isArray(items)) {
       if (!items) {
@@ -1501,7 +1518,7 @@ export function sendError(err: any) {
   if (isDedicatedWorker()) {
     postMessage({ __system: true, __error: err });
   } else {
-    throw new Error("sendError only usable from worker thread!");
+    throw new NotInWorkerThread("sendError");
   }
 }
 
@@ -1515,9 +1532,7 @@ export function numMessagesProcessing(): number {
   if (isDedicatedWorker() || isSharedWorker()) {
     return messagesProcessing;
   } else {
-    throw new Error(
-      "numMessagesProcessing only usable from worker or shared worker thread!",
-    );
+    throw new NotInWorkerThread("numMessagesProcessing");
   }
 }
 
@@ -1592,7 +1607,7 @@ export function transfer(
       transfer: items,
     } as any);
   } else {
-    throw new Error("transfer only usable from worker thread!");
+    throw new NotInWorkerThread("transfer");
   }
 }
 
@@ -1693,7 +1708,7 @@ if (isDedicatedWorker()) {
         curThreadId,
         "Thread is shutting down but receiving messages!",
       );
-      sendError(new Error(`Thread is shutting down!`));
+      sendError(new ThreadClosedError());
     }
 
     if (threadIdleTimeout) {
@@ -1844,7 +1859,8 @@ if (isDedicatedWorker()) {
             } else if ("__close" in e.data) {
               self.close();
             } else {
-              throw new Error("INVALID SYSTEM EVENT!" + JSON.stringify(e.data));
+              console.error("BAD INCOMING MESSAGE!", e.data);
+              throw new BadMessageError();
             }
           } else if ((self as any).onevent) {
             doLogs && console.log(curThreadId, "Message is a custom event!");
@@ -1944,7 +1960,7 @@ export class Connection {
           curThreadId,
           "Thread is shutting down but receiving messages!",
         );
-        this.sendError(new Error(`Thread is shutting down!`));
+        this.sendError(new ThreadClosedError());
       }
 
       if (threadIdleTimeout) {
@@ -2102,9 +2118,8 @@ export class Connection {
               } else if ("__close" in e.data) {
                 this.close();
               } else {
-                throw new Error(
-                  "INVALID SYSTEM EVENT!" + JSON.stringify(e.data),
-                );
+                console.error("BAD INCOMING MESSAGE!", e.data);
+                throw new BadMessageError();
               }
             } else if ((self as any).onevent) {
               doLogs && console.log(curThreadId, "Message is a custom event!");

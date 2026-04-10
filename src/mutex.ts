@@ -8,6 +8,7 @@
 
 import type { ElementLayout } from "./types.ts";
 import { Address, type DehydratedAddress, make } from "./memory.ts";
+import { NoWaitAsyncError } from "./errors.ts";
 
 /**
  * Dehydrated mutex. Mostly useful for defining dehydrated interfaces for objects having a mutex
@@ -136,7 +137,7 @@ export class Mutex {
    */
   public async lockAsync(timeout: number = Infinity): Promise<boolean> {
     if (!("waitAsync" in Atomics)) {
-      throw new Error("waitAsync not available!");
+      throw new NoWaitAsyncError();
     }
     if (
       this.addr.atomicCmpExch(Mutex.unlocked, Mutex.locked) === Mutex.unlocked

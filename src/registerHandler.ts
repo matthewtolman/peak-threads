@@ -7,6 +7,7 @@
  */
 
 import type { Connection } from "./thread.ts";
+import { NotInWorkerThread } from "./errors.ts";
 
 /**
  * Registers a global handler. Can only be called from a {@link Thread} that is spawned (not from the main thread).
@@ -41,7 +42,7 @@ export function registerHandler(
         break;
     }
   } else {
-    throw new Error("registerHandler only usable from worker thread!");
+    throw new NotInWorkerThread("registerHandler");
   }
 }
 
@@ -89,6 +90,6 @@ export function registerSharedHandler(
         break;
     }
   } else {
-    throw new Error("registerHandler only usable from worker thread!");
+    throw new NotInWorkerThread("registerSharedHandler");
   }
 }

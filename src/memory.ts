@@ -7,6 +7,12 @@
  */
 
 import type { BigIntTypedArray, TypedArray } from "./types.ts";
+import {
+  InvalidMemoryLayoutError,
+  MemoryNotAtomicError,
+  NoWaitAsyncError,
+  OutOfBoundsError,
+} from "./errors.ts";
 
 export interface DehydratedAddress<T extends TypedArray> {
   memory: T;
@@ -41,7 +47,7 @@ export class Address<
     this.indx = memOffset;
     this.cnt = cnt;
     if (memOffset + cnt > memArray.length) {
-      throw new Error(`Address out of bounds!`);
+      throw new OutOfBoundsError();
     }
   }
 
@@ -82,7 +88,7 @@ export class Address<
     if (index < this.cnt) {
       return this.mem.at(this.indx + index)!! as R;
     }
-    throw new Error("Out of bounds access detected!");
+    throw new OutOfBoundsError();
   }
 
   /**
@@ -94,7 +100,7 @@ export class Address<
     if (index < this.cnt) {
       return this.mem.set([value as any], this.indx + index)!!;
     }
-    throw new Error("Out of bounds access detected!");
+    throw new OutOfBoundsError();
   }
 
   /**
@@ -126,7 +132,7 @@ export class Address<
    */
   public atomicAdd(amt?: R, index = 0): R {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (typeof amt === "undefined") {
       if (
@@ -150,7 +156,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.add(this.mem as any, this.indx + index, amt as any) as R;
   }
@@ -163,7 +169,7 @@ export class Address<
    */
   public atomicSub(amt?: R, index = 0): R {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (typeof amt === "undefined") {
       if (
@@ -187,7 +193,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.sub(this.mem as any, this.indx + index, amt as any) as R;
   }
@@ -200,7 +206,7 @@ export class Address<
    */
   public atomicAnd(val?: R, index = 0): R {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (typeof val === "undefined") {
       if (
@@ -224,7 +230,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.and(this.mem as any, this.indx + index, val as any) as R;
   }
@@ -237,7 +243,7 @@ export class Address<
    */
   public atomicOr(val?: R, index = 0): R {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (
       !(
@@ -251,7 +257,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.or(this.mem as any, this.indx + index, val as any) as R;
   }
@@ -264,7 +270,7 @@ export class Address<
    */
   public atomicXor(val?: R, index = 0): R {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (
       !(
@@ -278,7 +284,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.or(this.mem as any, this.indx + index, val as any) as R;
   }
@@ -292,7 +298,7 @@ export class Address<
    */
   public atomicCmpExch(expected: R, replacement: R, index = 0): R {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (
       !(
@@ -306,7 +312,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.compareExchange(
       this.mem as any,
@@ -324,7 +330,7 @@ export class Address<
    */
   public atomicExchange(replacement: R, index = 0): R {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (
       !(
@@ -338,7 +344,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.exchange(
       this.mem as any,
@@ -355,7 +361,7 @@ export class Address<
    */
   public atomicStore(replacement: R, index = 0): void {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (
       !(
@@ -369,7 +375,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     Atomics.store(this.mem as any, this.indx + index, replacement as any) as R;
   }
@@ -381,7 +387,7 @@ export class Address<
    */
   public atomicLoad(index = 0): R {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (
       !(
@@ -395,7 +401,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.load(this.mem as any, this.indx + index) as R;
   }
@@ -409,7 +415,7 @@ export class Address<
    */
   public atomicNotify(cnt: number = Infinity, index = 0): number {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (
       !(
@@ -423,7 +429,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.notify(this.mem as any, this.indx + index, cnt);
   }
@@ -462,7 +468,7 @@ export class Address<
     index = 0,
   ): "ok" | "not-equal" | "timed-out" {
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (
       !(
@@ -476,7 +482,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     return Atomics.wait(
       this.mem as any,
@@ -500,10 +506,10 @@ export class Address<
     index = 0,
   ): Promise<"ok" | "not-equal" | "timed-out"> {
     if (!("waitAsync" in Atomics)) {
-      throw new Error("waitAsync not available!");
+      throw new NoWaitAsyncError();
     }
     if (index >= this.cnt) {
-      throw new Error("OUT OF BOUNDS!");
+      throw new OutOfBoundsError();
     }
     if (
       !(
@@ -517,7 +523,7 @@ export class Address<
         this.mem instanceof BigUint64Array
       )
     ) {
-      throw new Error("INVALID UNDERLYING MEMORY FOR ATOMIC OPERATIONS!");
+      throw new MemoryNotAtomicError();
     }
     let { async, value } = (Atomics as any).waitAsync(
       this.mem as any,
@@ -612,7 +618,7 @@ export function make<T>(Type: T, ...args: any[]) {
         t = Float64Array;
         break;
       default:
-        throw new Error("Invalid layout " + layout);
+        throw new InvalidMemoryLayoutError(layout);
     }
 
     const byte = t.BYTES_PER_ELEMENT;

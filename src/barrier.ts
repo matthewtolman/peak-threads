@@ -9,6 +9,7 @@
 import type { ElementLayout } from "./types.ts";
 import { type DehydratedMutex, Mutex } from "./mutex.ts";
 import { Address, type DehydratedAddress, make } from "./memory.ts";
+import { InvalidAddressError, NoWaitAsyncError } from "./errors.ts";
 
 export interface DehydratedBarrier {
   mux: DehydratedMutex;
@@ -54,7 +55,7 @@ export class Barrier {
     this.addr = addr;
     this.maxNeeded = needed;
     if (addr.count() < 2) {
-      throw new Error("INVALID ADDRESS! MUST BE AT LEAST 2 INT32 WIDE!");
+      throw new InvalidAddressError(2, "INT32");
     }
   }
 
@@ -111,7 +112,7 @@ export class Barrier {
    */
   public async waitAsync() {
     if (!("waitAsync" in Atomics)) {
-      throw new Error("waitAsync not available!");
+      throw new NoWaitAsyncError();
     }
     await this.mutex.lockAsync();
     this.addr.set(this.addr.get(this.numHit) + 1, this.numHit);

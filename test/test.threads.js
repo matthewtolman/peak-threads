@@ -541,9 +541,9 @@ describe("ThreadPool", () => {
     pool.close();
   });
 
-  it("can handle bad workers", async function () {
+  it("can handle pathological workers (0% job loss; 100,000 retryable events) ~ 21 seconds", async function () {
     console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    this.timeout(30_000);
+    this.timeout(40_000);
     const pool = await ThreadPool.spawn("worker-bad.js", {
       initData: 2,
       minThreads: 0,
@@ -586,7 +586,10 @@ describe("ThreadPool", () => {
     // see if we will spin up under really high load
     // see if we will spin up under really high load
     {
-      let work = new Array(500).fill(500);
+      const workload = 100_000;
+      let work = new Array(workload).fill(workload);
+      const lossRate = 0.0;
+      const successRate = 1.0 - lossRate;
       let resPromises = work.map((w) => pool.sendWork(w));
 
       let success = 0;
@@ -601,7 +604,7 @@ describe("ThreadPool", () => {
         }
       }
       // We should still have successes
-      expect(success).to.be.greaterThan(3);
+      expect(success).to.be.at.least(work.length * successRate);
 
       // let things calm down a bit
       await new Promise((r) => setTimeout(() => r(null), 10));
