@@ -12,7 +12,7 @@
   "author": "Matthew Tolman (https://matthewtolman.com)",
   "repository": {
     "type": "git",
-    "url": "https://git.matthewtolman.dev/mtolman/peak-threads"
+    "url": "https://github.com/matthewtolman/peak-threads"
   },
   "description": "Simplifying threading in the browser and implementing missing synchronization primitives as well",
   "keywords": [
