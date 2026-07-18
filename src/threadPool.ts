@@ -6,7 +6,7 @@
     file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-import { Thread } from "./thread.ts";
+import {Thread, type ThreadWorker} from "./thread.ts";
 import {
   ThreadClosedError,
   ThreadPoolClosedError,
@@ -81,7 +81,7 @@ interface ThreadInfo {
  * However, after 5 attempts (with backoff), the pool will fail queueing the work and throw an error instead.
  *
  */
-export class ThreadPool {
+export class ThreadPool implements ThreadWorker {
   private threads: ThreadInfo[];
   private maxThreads: number;
   private minThreads: number;

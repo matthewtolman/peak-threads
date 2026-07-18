@@ -6,8 +6,7 @@ and having locks, wait groups, condition variables, and other shared memory sync
 memory to work, you must be in a secure context and be cross-origin isolated!).
 
 [API reference](https://peak-threads.matthewtolman.dev) documentation is available online.
-[Primary development repository](https://git.matthewtolman.dev/mtolman/peak-threads) available online.
-[Mirror repository and issue tracker](https://github.com/matthewtolman/peak-threads) available on GitHub.
+[Git Repository](https://github.com/matthewtolman/peak-threads) available on GitHub.
 [NPM](https://www.npmjs.com/package/peak-threads).
 
 ## Installation
@@ -122,6 +121,33 @@ Here is an example:
 ```
 
 > Note: The worker code did not change from the general usage example. Workers don't care if they're in a pool or not. This makes it trivial to switch between the two
+
+## Common Interface for sending work
+
+Often, most methods just want to use the `sendWork` function to send work to a background thread. The function itself doesn't
+care if the work goes to a thread or thread pool or even a shared thread (powered by a shared worker). All the function cares
+is that the work is done asynchronously.
+
+Peaks provides an interface for doing just that which works with all thread objects (Thread, ThreadPool, SharedThread) provided
+by the library. The interface is `ThreadWorker` and allows work to be done interchangeably. Note that the only method exposed
+is `sendWork` since it is the only method in common between all threading classes.
+
+```ts
+// Declare our method with a ThreadWorker so we can change what threading model we use
+async function queueWork(worker: ThreadWorker) {
+    return await worker.sendWork({work: 'of some kind'})
+}
+
+// Create our different threading models
+const thread = Thread.spawn('worker.js', {type: 'module'})
+const pool = ThreadPool.spawn('worker.js', {type: 'module'})
+const shared = SharedThread.spawn('shared-worker.js', {type: 'module'})
+
+// The same method can be used with all of these different threading models
+queueWork(thread)
+queueWork(pool)
+queueWork(shared)
+```
 
 ## Use with modules
 

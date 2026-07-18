@@ -340,6 +340,13 @@ function getThreadId(): string {
   return curThreadId;
 }
 
+export interface ThreadWorker {
+  sendWork<R = any>(
+      work: any,
+      options?: StructuredSerializeOptions,
+  ): Promise<R>
+}
+
 /**
  * Options for creating a thread
  */
@@ -484,7 +491,7 @@ export interface SharedThreadOptions {
  * * `transfer(message: any, items: []any): void` - Transfers ownership of a resource to the parent thread
  *
  */
-export class Thread {
+export class Thread implements ThreadWorker {
   private worker: Worker;
   private threadId: string;
   private incWorkId: number = 0;
@@ -1008,7 +1015,7 @@ export class Thread {
  * and instead of trying to hide it (most likely by adding a "connection" to the Thread-side) we decided to embrace it.
  * Again, the semantics are different, how things work are different, and if you're not aware then you will run into issues.
  */
-export class SharedThread {
+export class SharedThread implements ThreadWorker {
   private worker: SharedWorker;
   private incWorkId: number = 0;
   private handler: ((_: any) => any) | undefined;
