@@ -9,6 +9,8 @@
 importScripts("/dist/threads.iife.js");
 threads.setLogging(true);
 
+console.log(self instanceof SharedWorkerGlobalScope)
+
 self.oninit = (conn, val) => {
   conn.context = val;
 };
