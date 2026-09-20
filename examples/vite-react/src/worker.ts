@@ -1,22 +1,29 @@
-import {registerHandler, ResponseWithTransfer} from 'peak-threads'
-import {runWork} from "./imageManipulation.ts";
+import {ResponseWithTransfer, Thread} from 'peak-threads'
+import {type ImageWork, runWork} from "./imageManipulation.ts";
 import montecarlo from "./montecarlo.ts";
 
-registerHandler('work', (work: any) => {
-    if (work.type === 'montecarlo') {
-        return montecarlo()
-    }
-    else if (work.type === 'pixelate_image') {
-        console.log('received image')
+const def = {
+    thread: {
+        work: {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            montecarlo: (_: object) => montecarlo(),
+            pixelate_image: (work: ImageWork) => {
+                console.log('received image')
 
-        const {orig, result} = runWork(work)
+                const {orig, result} = runWork(work)
 
-        console.log('sending back image...')
-        return new ResponseWithTransfer(
-            {
-                orig,
-                result,
+                console.log('sending back image...')
+                return new ResponseWithTransfer(
+                    {
+                        orig,
+                        result,
+                    }
+                    , [orig, result])
             }
-        , [orig, result])
+        }
     }
-})
+}
+
+export type WorkerThread = Thread<typeof def>
+
+Thread.serve(def)

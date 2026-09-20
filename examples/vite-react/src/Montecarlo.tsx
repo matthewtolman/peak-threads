@@ -19,7 +19,7 @@ export function Montecarlo({usePool}: Props) {
                     setRunning(true)
                     setResult(0)
                     if (usePool) {
-                        setResult(await pool.sendWork({type: 'montecarlo'}))
+                        setResult(await pool.sendWork('montecarlo', {}))
                     }
                     else {
                         setResult(montecarlo())

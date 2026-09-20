@@ -6,7 +6,7 @@ import {ImageManipulator} from "./ImageManipulator.tsx";
 import {useState} from "react";
 
 function App() {
-    const [usePool, setUsePool] = useState(false)
+    const [usePool, setUsePool] = useState(true)
     return (
             <ThreadPool>
                 <div>

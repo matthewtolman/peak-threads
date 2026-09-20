@@ -27,7 +27,6 @@ async function processImage(pool: ThreadPool | undefined, imageBitmap: ImageBitm
         console.log('processing')
 
         const params: any = {
-            type: 'pixelate_image',
             imageBitmap,
             outWidth: 1300,
             action: algorithm
@@ -42,7 +41,7 @@ async function processImage(pool: ThreadPool | undefined, imageBitmap: ImageBitm
         let m: ImageBitmap
 
         if (pool) {
-            const {orig, result} = await pool.sendWork(params, {transfer: [imageBitmap]})
+            const {orig, result} = await pool.sendWork( 'pixelate_image', params, {transfer: [imageBitmap]})
             m = result
             setImageBitmap(orig)
         } else {

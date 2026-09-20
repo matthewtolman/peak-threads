@@ -141,7 +141,6 @@ export const blurKernel = (window: number) => {
 }
 
 export interface ImageWork {
-    type: string,
     imageBitmap: ImageBitmap,
     outWidth: number,
     action: Algorithm,
@@ -263,8 +262,8 @@ export function applyKernel(data: Uint8ClampedArray, width: number, height: numb
     const offX = Math.floor(kernel.length / 2)
     const offY = Math.floor(kernel.length / 2)
 
-    let outWidth = width
-    let outHeight = height
+    const outWidth = width
+    const outHeight = height
 
     for (let ky = 0; ky < kernel.length; ++ky) {
         for (let kx = 0; kx < kernel.length; ++kx) {
@@ -375,6 +374,7 @@ export function applyKernel(data: Uint8ClampedArray, width: number, height: numb
                         r += kernel[ky][kx].r * data[inIndex + redOffset]
                         g += kernel[ky][kx].g * data[inIndex + greenOffset]
                         b += kernel[ky][kx].b * data[inIndex + blueOffset]
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
                         a += kernel[ky][kx].a * data[inIndex + alphaOffset]
                     }
                 }

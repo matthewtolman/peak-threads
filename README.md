@@ -189,6 +189,18 @@ async function myFunc() {
 }
 ```
 
+**Note:** Some TypeScript config files will need to be adjusted to work properly. Peak Threads uses types only defined in the TypeScript
+WebWorker type definitions. If you get "Type not defined" errors, then in your TypeScript `compilerOptions`, add `"WebWorker"` to your `"lib"` array.
+Example:
+
+```json
+{
+    "compileOptions": {
+        "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"]
+    }
+}
+```
+
 ## Registering handlers explicitly
 
 TypeScript doesn't like the whole "define a global method" for registering handlers as it doesn't match the built-in `self` type.
@@ -209,6 +221,107 @@ registerHandler('init', (y) => console.log('Got y'))
 
 // ....
 ```
+
+## Work dispatched by a "type"
+
+So far we've just been using a single `work` handler to handle work requests. For simple workers that only do one thing, this is fine.
+But, what if we wanted to do multiple things in a single worker? Traditionally, we would use an object with a `type` key, and then switch
+in the `work` handler. Something like so:
+
+```typescript
+// worker.ts
+registerHandler('work', ({type, x}: {type: 'add' | 'mul', x: number}) => {
+    switch(type) {
+        case 'add': return x + x
+        case 'mul': return x * x
+    }
+})
+
+// main.ts
+thread.sendWork({type: 'add', x: 5})
+thread.sendWork({type: 'mul', x: 2})
+```
+
+While that works, it would be nice if we didn't have to manage a large switch statement ourselves.
+Fortunately, Peak Threads provides a "typed work" dispatch feature that manages that switch statement for you.
+All that you need to do is register a "work type" as an additional parameter, and then use that "work type" in the `sendWork` call, like so:
+
+```typescript
+// worker.ts
+registerHandler('work', 'add', x => x + x)
+registerHandler('work', 'mul', x => x * x)
+
+// main.ts
+thread.sendWork('add', 5)
+thread.sendWork('mul', 2)
+```
+
+Not only is this much shorter, but it also integrates nicely with the type safety system that we'll explore next!
+
+## Type Safe Threads (TypeScript)
+
+So far, we've just been using functions that use `any` for the types being sent and received. This is very easy to get started quickly,
+and it can be sufficient for small projects. However, as projects grow - or more workers are introduced - it often becomes necessary to start enforcing types.
+We can do this by moving away from ad-hoc handler registration and to a more formal thread definition object.
+With this object, Peak Threads can infer the parameter and return types for all callbacks (including `sendWork`) - and it can even set types to `never` to
+"disable" callbacks that your thread doesn't explicitly support!
+
+The way we do this is with a `ThreadDefinition` interface object. It generally is an object that holds a `thread` key, and that `thread` key
+holds a lot of callbacks (keyed the same way `registerHandler` keys them). Once we have a definition, we can pass the type of that definition (via `typeof`)
+to the `Thread` type to get a type-safe type.
+
+We can then use our definition object to register all of our handlers by passing it to `Thread.serve` - which will then serve all of those handlers automatically! 
+Here is an example:
+
+```typescript
+const threadDef = {
+    thread: {
+        init: (a: number) => { console.log (a) }, // defines the 'init' callback
+        work: (a: number) => a + a, // defines the 'work' callback
+        // event key is missing, so sendEvent will have a `never` parameter type
+    }
+}
+
+export type MyThread = Thread<typeof threadDef> // Gets a type-safe thread type! Export so we can use it elsewhere
+
+Thread.serve(threadDef) // Register and serve our handlers
+```
+
+If we're using typed work objects, then instead of having a callback for `thread.work` we instead have a `Record` of callbacks.
+The work types are then inferred from the record keys, allowing us to do the following:
+
+```typescript
+const mathDef = {
+    thread: {
+        add: (x: number) => x + x, // set to the 'add' work type
+        mul: (x: number) => x * x, // set to the 'mul' work type
+    }
+}
+
+export type MathThread = Thread<typeof mathDef>
+Thread.serve(mathDef)
+```
+
+### Thread Pools
+
+Thread pools can also benefit from type safety. They infer their type safety from the thread definition object as well.
+You can either pass the type of your thread definition object in, or you can infer it from your Thread type with `ThreadDef`.
+
+```typescript
+const mathDef = {
+    thread: {
+        add: (x: number) => x + x, // set to the 'add' work type
+        mul: (x: number) => x * x, // set to the 'mul' work type
+    }
+}
+
+export type MathThreadPool1 = ThreadPool<typeof mathDef> // infer pool from the definition directly
+
+type MathThread = Thread<typeof mathDef>
+export type MathThreadPool2 = ThreadPool<ThreadDef<any>> // infer pool from the thread
+```
+
+We will discuss thread pools more in-depth later.
 
 ## Sending classes
 

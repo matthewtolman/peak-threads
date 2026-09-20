@@ -18,110 +18,135 @@ const {
   Semaphore,
 } = threads;
 
+const basicWorkers = ['worker1.js', 'worker5.js', 'worker6.js']
+const basicSharedWorkers = ['shared-worker1.js', 'shared-worker5-v5.js', 'shared-worker4-v3.js']
+
 describe("Thread", () => {
   threads.setLogging(true);
 
-  it("is setup", async function () {
+  it("can detect invalid urls", async function () {
     console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    const thread = await Thread.spawn("worker1.js", { closeWhenIdle: 100 });
-    expect(thread).to.not.be.null;
+    try {
+      await Thread.spawn('invalid-file.js')
+      expect(false).to.be(true)
+    } catch (e) {
+
+    }
+  });
+
+  it("is setup", async function () {
+    for (const w of basicWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      const thread = await Thread.spawn(w, {closeWhenIdle: 100});
+      expect(thread).to.not.be.null;
+    }
   });
 
   it("can create thread", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    const thread = await Thread.spawn("worker1.js", { closeWhenIdle: 100 });
-    expect(thread).to.not.be.null;
-    expect(await thread.sendWork(4)).to.equal(16);
+    for (const w of basicWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      const thread = await Thread.spawn(w, {closeWhenIdle: 100});
+      expect(thread).to.not.be.null;
+      expect(await thread.sendWork(4)).to.equal(16);
+    }
   });
 
   it("event handler", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    let resolve;
-    const p = new Promise((res) => {
-      resolve = res;
-    });
-    const handler = (v) => {
-      resolve(v.data);
-    };
-    const thread = await Thread.spawn("worker1.js", {
-      initData: 45,
-      onEventHandler: handler,
-      closeWhenIdle: 100,
-    });
-    expect(thread).to.not.be.null;
-    expect(await thread.sendWork(4)).to.equal(16);
-    thread.sendEvent(-23);
-    expect(await p).to.equal(45);
+    for (const w of basicWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      let resolve;
+      const p = new Promise((res) => {
+        resolve = res;
+      });
+      const handler = (v) => {
+        resolve(v.data);
+      };
+      const thread = await Thread.spawn(w, {
+        initData: 45,
+        onEventHandler: handler,
+        closeWhenIdle: 100,
+      });
+      expect(thread).to.not.be.null;
+      expect(await thread.sendWork(4)).to.equal(16);
+      thread.sendEvent(-23);
+      expect(await p).to.equal(45);
+    }
   });
 
   it("share handler", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    let resolve;
-    const p = new Promise((res) => {
-      resolve = res;
-    });
-    const handler = (v) => {
-      resolve(v.data);
-    };
-    const thread = await Thread.spawn("worker1.js", {
-      initData: 45,
-      onEventHandler: handler,
-      closeWhenIdle: 100,
-    });
-    expect(thread).to.not.be.null;
+    for (const w of basicWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      let resolve;
+      const p = new Promise((res) => {
+        resolve = res;
+      });
+      const handler = (v) => {
+        resolve(v.data);
+      };
+      const thread = await Thread.spawn(w, {
+        initData: 45,
+        onEventHandler: handler,
+        closeWhenIdle: 100,
+      });
+      expect(thread).to.not.be.null;
 
-    await thread.share(99);
-    expect(await thread.sendWork(4)).to.equal(16);
-    thread.sendEvent(-23);
+      await thread.share(99);
+      expect(await thread.sendWork(4)).to.equal(16);
+      thread.sendEvent(-23);
 
-    // graceful shutdown
-    thread.close();
+      // graceful shutdown
+      thread.close();
 
-    // should still be able to await for the response back
-    expect(await p).to.equal(99);
+      // should still be able to await for the response back
+      expect(await p).to.equal(99);
+    }
   });
 
   it("share handler message", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    let resolve;
-    const p = new Promise((res) => {
-      resolve = res;
-    });
-    const handler = (v) => {
-      resolve(v.data);
-    };
-    const thread = await Thread.spawn("worker1.js", {
-      initData: 45,
-      onEventHandler: handler,
-    });
-    expect(thread).to.not.be.null;
+    for (const w of basicWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      let resolve;
+      const p = new Promise((res) => {
+        resolve = res;
+      });
+      const handler = (v) => {
+        resolve(v.data);
+      };
+      const thread = await Thread.spawn(w, {
+        initData: 45,
+        onEventHandler: handler,
+      });
+      expect(thread).to.not.be.null;
 
-    await thread.share(99, 55);
-    expect(await thread.sendWork(4)).to.equal(16);
-    thread.sendEvent(-23);
-    expect(await p).to.equal(55);
+      await thread.share(99, 55);
+      expect(await thread.sendWork(4)).to.equal(16);
+      thread.sendEvent(-23);
+      expect(await p).to.equal(55);
+    }
   });
 
   it("transfer handler can be called", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    let resolve;
-    const p = new Promise((res) => {
-      resolve = res;
-    });
-    const handler = (v) => {
-      resolve(v.data);
-    };
-    const thread = await Thread.spawn("worker1.js", {
-      initData: 45,
-      onEventHandler: handler,
-    });
-    expect(thread).to.not.be.null;
+    for (const w of basicWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      let resolve;
+      const p = new Promise((res) => {
+        resolve = res;
+      });
+      const handler = (v) => {
+        resolve(v.data);
+      };
+      const thread = await Thread.spawn(w, {
+        initData: 45,
+        onEventHandler: handler,
+      });
+      expect(thread).to.not.be.null;
 
-    await thread.transfer(99, []);
-    expect(await thread.sendWork(4)).to.equal(16);
-    thread.sendEvent(-23);
-    expect(await p).to.equal(99);
-    thread.close();
+      await thread.transfer(99, []);
+      expect(await thread.sendWork(4)).to.equal(16);
+      thread.sendEvent(-23);
+      expect(await p).to.equal(99);
+      thread.close();
+    }
   });
 
   it("transfer handler transfers ownership", async function () {
@@ -237,111 +262,135 @@ describe("Thread", () => {
 describe("SharedThread", () => {
   threads.setLogging(true);
 
-  it("is setup", async function () {
+  it("can detect invalid urls", async function () {
     console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    const thread = await SharedThread.connect("shared-worker1.js", {
-      closeWhenIdle: 100,
-    });
-    expect(thread).to.not.be.null;
+    try {
+      await SharedThread.spawn('invalid-file.js')
+      expect(false).to.be(true)
+    } catch (e) {
+
+    }
+  });
+
+
+  it("is setup", async function () {
+    for (const w of basicSharedWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      const thread = await SharedThread.connect(w, {
+        closeWhenIdle: 100,
+      });
+      expect(thread).to.not.be.null;
+    }
   });
 
   it("can connect to thread", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    const thread = await SharedThread.connect("shared-worker1.js", {
-      closeWhenIdle: 100,
-    });
-    expect(thread).to.not.be.null;
-    expect(await thread.sendWork(4)).to.equal(16);
+    for (const w of basicSharedWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      console.log(w)
+      const thread = await SharedThread.connect(w, {
+        closeWhenIdle: 100000,
+      });
+      expect(thread).to.not.be.null;
+      expect(await thread.sendWork(4)).to.equal(16);
+    }
   });
 
   it("event handler", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    let resolve;
-    const p = new Promise((res) => {
-      resolve = res;
-    });
-    const handler = (v) => {
-      resolve(v.data);
-    };
-    const thread = await SharedThread.connect("shared-worker1.js", {
-      initData: 45,
-      onEventHandler: handler,
-      closeWhenIdle: 100,
-    });
-    expect(thread).to.not.be.null;
-    expect(await thread.sendWork(4)).to.equal(16);
-    thread.sendEvent(-23);
-    expect(await p).to.equal(45);
+    for (const w of basicSharedWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      let resolve;
+      const p = new Promise((res) => {
+        resolve = res;
+      });
+      const handler = (v) => {
+        resolve(v.data);
+      };
+      const thread = await SharedThread.connect(w, {
+        initData: 45,
+        onEventHandler: handler,
+        closeWhenIdle: 100,
+      });
+      expect(thread).to.not.be.null;
+      expect(await thread.sendWork(4)).to.equal(16);
+      thread.sendEvent(-23);
+      expect(await p).to.equal(45);
+    }
   });
 
   it("share handler", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    let resolve;
-    const p = new Promise((res) => {
-      resolve = res;
-    });
-    const handler = (v) => {
-      resolve(v.data);
-    };
-    const thread = await SharedThread.connect("shared-worker1.js", {
-      initData: 45,
-      onEventHandler: handler,
-      closeWhenIdle: 100,
-    });
-    expect(thread).to.not.be.null;
+    for (const w of basicSharedWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      let resolve;
+      const p = new Promise((res) => {
+        resolve = res;
+      });
+      const handler = (v) => {
+        resolve(v.data);
+      };
+      const thread = await SharedThread.connect(w, {
+        initData: 45,
+        onEventHandler: handler,
+        closeWhenIdle: 100,
+      });
+      expect(thread).to.not.be.null;
 
-    await thread.share(99);
-    expect(await thread.sendWork(4)).to.equal(16);
-    thread.sendEvent(-23);
+      await thread.share(99);
+      expect(await thread.sendWork(4)).to.equal(16);
+      thread.sendEvent(-23);
 
-    // graceful shutdown
-    thread.disconnect();
+      // graceful shutdown
+      thread.disconnect();
 
-    // should still be able to await for the response back
-    expect(await p).to.equal(99);
+      // should still be able to await for the response back
+      expect(await p).to.equal(99);
+    }
   });
 
   it("share handler message", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    let resolve;
-    const p = new Promise((res) => {
-      resolve = res;
-    });
-    const handler = (v) => {
-      resolve(v.data);
-    };
-    const thread = await SharedThread.connect("shared-worker1.js", {
-      initData: 45,
-      onEventHandler: handler,
-    });
-    expect(thread).to.not.be.null;
+    for (const w of basicSharedWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      let resolve;
+      const p = new Promise((res) => {
+        resolve = res;
+      });
+      const handler = (v) => {
+        resolve(v.data);
+      };
+      const thread = await SharedThread.connect(w, {
+        initData: 45,
+        onEventHandler: handler,
+      });
+      expect(thread).to.not.be.null;
 
-    await thread.share(99, 55);
-    expect(await thread.sendWork(4)).to.equal(16);
-    thread.sendEvent(-23);
-    expect(await p).to.equal(55);
+      await thread.share(99, 55);
+      expect(await thread.sendWork(4)).to.equal(16);
+      thread.sendEvent(-23);
+      expect(await p).to.equal(55);
+    }
   });
 
   it("transfer handler can be called", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    let resolve;
-    const p = new Promise((res) => {
-      resolve = res;
-    });
-    const handler = (v) => {
-      resolve(v.data);
-    };
-    const thread = await SharedThread.connect("shared-worker1.js", {
-      initData: 45,
-      onEventHandler: handler,
-    });
-    expect(thread).to.not.be.null;
+    for (const w of basicSharedWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      let resolve;
+      const p = new Promise((res) => {
+        resolve = res;
+      });
+      const handler = (v) => {
+        resolve(v.data);
+      };
+      const thread = await SharedThread.connect(w, {
+        initData: 45,
+        onEventHandler: handler,
+      });
+      expect(thread).to.not.be.null;
 
-    await thread.transfer(99, []);
-    expect(await thread.sendWork(4)).to.equal(16);
-    thread.sendEvent(-23);
-    expect(await p).to.equal(99);
-    thread.disconnect();
+      await thread.transfer(99, []);
+      expect(await thread.sendWork(4)).to.equal(16);
+      thread.sendEvent(-23);
+      expect(await p).to.equal(99);
+      thread.disconnect();
+    }
   });
 
   it("transfer handler transfers ownership", async function () {
@@ -428,15 +477,17 @@ describe("SharedThread", () => {
 
 describe("ThreadPool", () => {
   it("can create thread pool", async function () {
-    console.info(this.test.parent.title + ".`" + this.test.title + "`");
-    const pool = await ThreadPool.spawn("worker1.js", { initData: 2 });
-    expect(pool).to.not.be.null;
-    expect(await pool.sendWork(4)).to.equal(16);
-    expect(await pool.sendWork(2)).to.equal(4);
-    expect(await pool.sendWork(3)).to.equal(9);
-    expect(await pool.sendWork(5)).to.equal(25);
-    expect(await pool.sendWork(6)).to.equal(36);
-    pool.close();
+    for (const w of basicWorkers) {
+      console.info(this.test.parent.title + ".`" + this.test.title + "`");
+      const pool = await ThreadPool.spawn(w, {initData: 2});
+      expect(pool).to.not.be.null;
+      expect(await pool.sendWork(4)).to.equal(16);
+      expect(await pool.sendWork(2)).to.equal(4);
+      expect(await pool.sendWork(3)).to.equal(9);
+      expect(await pool.sendWork(5)).to.equal(25);
+      expect(await pool.sendWork(6)).to.equal(36);
+      pool.close();
+    }
   });
 
   it("can create dynamic thread pool", async function () {
@@ -583,7 +634,6 @@ describe("ThreadPool", () => {
       expect(j3).to.equal(9);
     }
 
-    // see if we will spin up under really high load
     // see if we will spin up under really high load
     {
       const workload = 100_000;

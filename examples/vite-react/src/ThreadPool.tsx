@@ -2,9 +2,11 @@ import {ThreadPool as Pool} from "peak-threads";
 import WorkerUrl from "./worker.ts?worker&url";
 import {useEffect, useState} from "react";
 import {PoolContext} from "./poolContext.ts";
+import type {WorkerThread} from "./worker.ts";
+import type {ThreadDef} from "../../../src/thread.ts";
 
 export function ThreadPool({children}: any) {
-    const [pool, setPool] = useState<Pool>(undefined as any)
+    const [pool, setPool] = useState<Pool<ThreadDef<WorkerThread>>>(undefined as any)
 
     useEffect(() => {
         Pool.spawn(WorkerUrl, {type: 'module'}).then(p => setPool(p))

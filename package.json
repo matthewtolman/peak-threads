@@ -1,7 +1,7 @@
 {
   "name": "peak-threads",
   "private": false,
-  "version": "1.0.1",
+  "version": "1.1.0",
   "type": "module",
   "homepage": "https://peak-threads.matthewtolman.dev",
   "license": "MPL-2.0",
@@ -32,7 +32,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && npm run doc",
     "pub": "npm run build && npm run doc && npm publish",
     "doc": "typedoc src/main.ts",
     "format": "prettier --write src/**/* test/**/*"
