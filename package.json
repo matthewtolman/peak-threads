@@ -33,7 +33,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && npm run doc",
-    "pub": "npm run build && npm run doc && npm publish",
+    "pub": "npm run build && npm publish",
     "doc": "typedoc src/main.ts",
     "format": "prettier --write src/**/* test/**/*"
   },
